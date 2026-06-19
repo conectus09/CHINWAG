@@ -1,74 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { connectPresenceSocket, getPresenceSocket } from "@/lib/presence-client";
+import { useCallback, useEffect, useState } from "react";
 
-let subscriberCount = 0;
+export interface OnlineCountState {
+  count: number;
+  waiting: number;
+  chatting: number;
+  source: "heartbeat" | "socket" | "none";
+  loading: boolean;
+}
 
-/**
- * Subscribes to real-time `online_count` events from the Socket.io server.
- * Falls back to /api/stats polling when the socket is unreachable.
- */
-export function useOnlineCount() {
-  const [count, setCount] = useState<number | null>(null);
-  const [connected, setConnected] = useState(false);
+const POLL_MS = 3000;
 
-  useEffect(() => {
-    const socket = getPresenceSocket();
-    subscriberCount += 1;
+export function useOnlineCount(): OnlineCountState {
+  const [state, setState] = useState<OnlineCountState>({
+    count: 0,
+    waiting: 0,
+    chatting: 0,
+    source: "none",
+    loading: true,
+  });
 
-    const onCount = (value: number) => {
-      if (typeof value === "number" && Number.isFinite(value)) {
-        setCount(Math.max(0, value));
-      }
-    };
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch("/api/presence", { cache: "no-store" });
+      if (!response.ok) return;
 
-    const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
+      const data = (await response.json()) as {
+        online?: number;
+        waiting?: number;
+        chatting?: number;
+        source?: "heartbeat" | "socket" | "none";
+      };
 
-    if (socket) {
-      socket.on("online_count", onCount);
-      socket.on("connect", onConnect);
-      socket.on("disconnect", onDisconnect);
-      connectPresenceSocket();
-      if (socket.connected) setConnected(true);
+      if (typeof data.online !== "number") return;
+
+      setState({
+        count: Math.max(0, data.online),
+        waiting: Math.max(0, data.waiting ?? 0),
+        chatting: Math.max(0, data.chatting ?? 0),
+        source: data.source ?? "heartbeat",
+        loading: false,
+      });
+    } catch {
+      setState((prev) => ({ ...prev, loading: false }));
     }
-
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const response = await fetch("/api/stats");
-        if (!response.ok || cancelled) return;
-        const data = (await response.json()) as { online?: number };
-        if (!cancelled && typeof data.online === "number") {
-          setCount((prev) =>
-            prev === null || !socket?.connected ? data.online! : prev,
-          );
-        }
-      } catch {
-        // ignore
-      }
-    };
-    void poll();
-    const pollTimer = window.setInterval(() => void poll(), 3000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(pollTimer);
-      if (socket) {
-        socket.off("online_count", onCount);
-        socket.off("connect", onConnect);
-        socket.off("disconnect", onDisconnect);
-        subscriberCount -= 1;
-        if (subscriberCount <= 0 && socket.connected) {
-          socket.disconnect();
-          subscriberCount = 0;
-        }
-      } else {
-        subscriberCount -= 1;
-      }
-    };
   }, []);
 
-  return { count, connected };
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), POLL_MS);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refresh]);
+
+  return state;
 }

@@ -51,7 +51,11 @@ export const REDIS_KEYS = {
   roomTyping: (roomId: string, userId: string) =>
     `chinwag:room:${roomId}:typing:${userId}`,
   guestMatches: (userId: string) => `chinwag:guest:matches:${userId}`,
+  /** ZSET — member = browser live id, score = last heartbeat ms */
+  livePresence: "chinwag:live:presence",
 } as const;
+
+export const LIVE_PRESENCE_HEARTBEAT_MS = 20_000;
 
 export type { ChatMessagePayload } from "./platform-types";
 

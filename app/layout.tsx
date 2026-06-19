@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { CookieConsent } from "@/components/cookie-consent";
+import { LivePresenceTracker } from "@/components/live-presence-tracker";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 import { APP_LOGO_URL, APP_NAME, APP_TAGLINE } from "@/lib/constants";
@@ -96,7 +97,10 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full text-foreground" suppressHydrationWarning>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <LivePresenceTracker />
+          {children}
+        </ThemeProvider>
         <CookieConsent />
       </body>
     </html>

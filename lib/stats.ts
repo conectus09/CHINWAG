@@ -1,5 +1,6 @@
-import { ONLINE_USERS_KEY, REDIS_KEYS } from "./constants";
-import { getRedis } from "./redis";
+import { REDIS_KEYS } from "./constants";
+import { getLivePresenceSnapshot } from "./live-presence";
+import { ensureRedisReady, getRedis } from "./redis";
 import type { PlatformStats } from "./platform-types";
 
 declare global {
@@ -10,6 +11,8 @@ declare global {
 const statsStore =
   global.chinwagStatsStore ??
   (global.chinwagStatsStore = { users: new Map() });
+
+const ACTIVITY_STALE_MS = 90_000;
 
 export async function trackPresence(userId: string, status: string): Promise<void> {
   const redis = getRedis();
@@ -22,24 +25,13 @@ export async function trackPresence(userId: string, status: string): Promise<voi
   statsStore.users.set(userId, { status, updatedAt: Date.now() });
 }
 
-export async function getPlatformStats(): Promise<PlatformStats> {
+export async function getActivityCounts(): Promise<{
+  waiting: number;
+  chatting: number;
+}> {
+  await ensureRedisReady();
   const redis = getRedis();
   const now = Date.now();
-  const staleMs = 90_000;
-
-  // Prefer Socket.io presence set when available (same source as live counter)
-  if (redis) {
-    const socketOnline = await redis.scard(ONLINE_USERS_KEY);
-    if (socketOnline > 0) {
-      return {
-        online: socketOnline,
-        waiting: 0,
-        chatting: 0,
-        totalToday: Math.max(socketOnline, Math.round(socketOnline * 1.4 + 12)),
-      };
-    }
-  }
-
   let waiting = 0;
   let chatting = 0;
 
@@ -48,7 +40,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
     for (const raw of Object.values(all)) {
       try {
         const entry = JSON.parse(raw) as { status: string; updatedAt: number };
-        if (now - entry.updatedAt > staleMs) continue;
+        if (now - entry.updatedAt > ACTIVITY_STALE_MS) continue;
         if (entry.status === "waiting") waiting += 1;
         if (entry.status === "matched") chatting += 1;
       } catch {
@@ -57,14 +49,23 @@ export async function getPlatformStats(): Promise<PlatformStats> {
     }
   } else {
     for (const entry of statsStore.users.values()) {
-      if (now - entry.updatedAt > staleMs) continue;
+      if (now - entry.updatedAt > ACTIVITY_STALE_MS) continue;
       if (entry.status === "waiting") waiting += 1;
       if (entry.status === "matched") chatting += 1;
     }
   }
 
-  const online = waiting + chatting;
-  const totalToday = Math.max(online, Math.round(online * 1.4 + 12));
+  return { waiting, chatting };
+}
 
-  return { online, waiting, chatting, totalToday };
+export async function getPlatformStats(): Promise<PlatformStats> {
+  const activity = await getActivityCounts();
+  const snapshot = await getLivePresenceSnapshot(activity);
+
+  return {
+    online: snapshot.online,
+    waiting: snapshot.waiting,
+    chatting: snapshot.chatting,
+    totalToday: snapshot.online,
+  };
 }

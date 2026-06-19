@@ -345,6 +345,32 @@ main {
   animation: live-counter-pulse 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
+.live-counter-ping-muted {
+  background-color: #a1a1aa;
+  animation: none;
+}
+
+.live-counter-dot-muted {
+  background: #a1a1aa;
+  box-shadow: none;
+}
+
+.live-counter-real {
+  border-color: color-mix(in srgb, #22c55e 25%, rgba(17, 24, 39, 0.1));
+}
+
+.live-counter-real-badge {
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #22c55e 35%, transparent);
+  background: color-mix(in srgb, #22c55e 12%, white);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #15803d;
+}
+
 @keyframes live-counter-pulse {
   0% {
     transform: scale(1);
