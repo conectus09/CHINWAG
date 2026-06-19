@@ -208,10 +208,10 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     longPollLoopRef.current = loopId;
     let cancelled = false;
 
-    void fetchStatus(false);
+    void fetchStatus(true);
 
     const burst = window.setInterval(() => {
-      void fetchStatus(false).catch(() => undefined);
+      void fetchStatus(true).catch(() => undefined);
     }, MATCH_BURST_POLL_MS);
 
     async function longPollLoop() {
@@ -227,14 +227,9 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
 
     void longPollLoop();
 
-    const stopBurst = window.setTimeout(() => {
-      window.clearInterval(burst);
-    }, 20000);
-
     return () => {
       cancelled = true;
       window.clearInterval(burst);
-      window.clearTimeout(stopBurst);
     };
   }, [fetchStatus, phase, userId]);
 
@@ -242,7 +237,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     if (phase !== "partner_left") return;
     const timer = window.setTimeout(() => {
       void findNext();
-    }, 700);
+    }, 350);
     return () => window.clearTimeout(timer);
   }, [findNext, phase]);
 

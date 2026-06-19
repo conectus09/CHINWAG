@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
           }
           return null;
         },
-        { intervalMs: 35, timeoutMs: LONG_POLL_TIMEOUT_MS },
+        { intervalMs: 15, timeoutMs: LONG_POLL_TIMEOUT_MS },
       );
 
       if (updated) {
@@ -80,14 +80,22 @@ export async function POST(request: NextRequest) {
 
     if (action === "next") {
       await leaveMatch(userId);
-      const result = await joinMatchQueue(userId, profile, preferences, {
+      let result = await joinMatchQueue(userId, profile, preferences, {
         isSkip: true,
       });
+      if (result.status === "waiting") {
+        const matched = await attemptQueueMatch(userId);
+        if (matched) result = matched;
+      }
       await trackEvent({ name: "match_next", userId });
       return NextResponse.json(result);
     }
 
-    const result = await joinMatchQueue(userId, profile, preferences);
+    let result = await joinMatchQueue(userId, profile, preferences);
+    if (result.status === "waiting") {
+      const matched = await attemptQueueMatch(userId);
+      if (matched) result = matched;
+    }
     await trackEvent({ name: "match_join", userId });
     return NextResponse.json(result);
   } catch (error) {

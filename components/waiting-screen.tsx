@@ -1,6 +1,7 @@
 "use client";
 
 import { Radio, X } from "lucide-react";
+import { LiveOnlineCounter } from "@/components/live-online-counter";
 
 interface WaitingScreenProps {
   onCancel: () => void;
@@ -52,6 +53,10 @@ export function WaitingScreen({
               : " · you're next"}
           </p>
         )}
+
+        <div className="flex justify-center py-2">
+          <LiveOnlineCounter />
+        </div>
 
         <div className="stranger-waiting-progress" aria-hidden>
           <span className="stranger-waiting-progress-bar" />

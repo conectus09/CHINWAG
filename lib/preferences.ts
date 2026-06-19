@@ -48,7 +48,7 @@ export function preferencesCompatible(
   if (a.region !== "any" && b.region !== "any" && a.region !== b.region) {
     return false;
   }
-  if (a.mood !== b.mood && a.mood !== "chat" && b.mood !== "chat") {
+  if (a.mood !== "chat" && b.mood !== "chat" && a.mood !== b.mood) {
     return false;
   }
   if (a.interests.length > 0 && b.interests.length > 0) {

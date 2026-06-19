@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, UserRound, X } from "lucide-react";
+import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MatchPreferencesPanel } from "@/components/match-preferences-panel";
 import { DEFAULT_PREFERENCES } from "@/lib/platform-types";
-import type { MatchPreferences } from "@/lib/platform-types";
+import { connectPresenceSocket } from "@/lib/presence-client";
 import { getUserProfile, setUserProfile } from "@/lib/user-profile";
 import { cn } from "@/lib/utils";
 
@@ -44,9 +44,6 @@ export function StartGateModal({
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
-  const [preferences, setPreferences] = useState<MatchPreferences>({
-    ...DEFAULT_PREFERENCES,
-  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,12 +53,13 @@ export function StartGateModal({
   useEffect(() => {
     if (!open) return;
 
+    connectPresenceSocket();
+
     const saved = getUserProfile();
     if (saved) {
       setName(saved.name);
       setAge(String(saved.age));
       setIsAdultConfirmed(saved.isAdultConfirmed);
-      setPreferences(saved.preferences ?? { ...DEFAULT_PREFERENCES });
     } else {
       setName("");
       setAge("");
@@ -111,11 +109,13 @@ export function StartGateModal({
       return;
     }
 
+    connectPresenceSocket();
+
     setUserProfile({
       name: trimmedName,
       age: parsedAge,
       isAdultConfirmed: true,
-      preferences,
+      preferences: { ...DEFAULT_PREFERENCES },
     });
 
     onComplete();
@@ -205,16 +205,11 @@ export function StartGateModal({
               </span>
             </label>
 
-            <div className="start-gate-prefs">
-              <p className="start-gate-label-text mb-2">Match preferences</p>
-              <MatchPreferencesPanel
-                value={preferences}
-                onChange={setPreferences}
-                compact
-              />
-            </div>
-
             {error && <p className="start-gate-error">{error}</p>}
+
+            <div className="flex justify-center py-1">
+              <LiveOnlineCounter />
+            </div>
 
             <Button type="submit" className="start-gate-submit w-full gap-1.5">
               <Play className="h-3.5 w-3.5" />
