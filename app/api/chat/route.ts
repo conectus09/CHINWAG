@@ -9,6 +9,7 @@ import {
   validateImageDataUrl,
 } from "@/lib/fallback-chat";
 import { LONG_POLL_TIMEOUT_MS } from "@/lib/constants";
+import { ensureRedisReady } from "@/lib/redis";
 import { waitUntil } from "@/lib/wait-until";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await ensureRedisReady();
     let snapshot = await loadChatSnapshot(roomId, since, partnerId, readerId);
 
     if (wait && snapshot.messages.length === 0 && !snapshot.partnerTyping) {
@@ -77,6 +79,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureRedisReady();
     const body = (await request.json()) as {
       roomId?: string;
       userId?: string;

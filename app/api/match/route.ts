@@ -8,6 +8,7 @@ import {
 import { LONG_POLL_TIMEOUT_MS } from "@/lib/constants";
 import type { MatchPreferences } from "@/lib/platform-types";
 import { trackEvent } from "@/lib/analytics";
+import { ensureRedisReady } from "@/lib/redis";
 import { waitUntil } from "@/lib/wait-until";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await ensureRedisReady();
     let status = await getMatchStatus(userId);
 
     if (status.status === "waiting") {
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureRedisReady();
     const body = (await request.json()) as {
       userId?: string;
       action?: "join" | "next" | "leave";

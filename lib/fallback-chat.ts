@@ -58,9 +58,12 @@ export async function addChatMessage(
   text: string,
   options?: { kind?: ChatMessagePayload["kind"]; imageUrl?: string; replyTo?: string },
 ): Promise<ChatMessagePayload> {
-  const filtered = filterMessage(text);
-  if (!filtered.ok) {
-    throw new Error(filtered.reason ?? "Message blocked");
+  const isSystem = sender === "system" || options?.kind === "system";
+  if (!isSystem) {
+    const filtered = filterMessage(text);
+    if (!filtered.ok) {
+      throw new Error(filtered.reason ?? "Message blocked");
+    }
   }
 
   const message: ChatMessagePayload = {
@@ -68,10 +71,10 @@ export async function addChatMessage(
     sender,
     text: text.trim(),
     timestamp: Date.now(),
-    kind: options?.kind ?? "text",
+    kind: options?.kind ?? (isSystem ? "system" : "text"),
     imageUrl: options?.imageUrl,
     replyTo: options?.replyTo,
-    readBy: [sender],
+    readBy: isSystem ? [] : [sender],
   };
 
   const redis = getRedis();
@@ -206,6 +209,30 @@ export async function isPartnerTyping(
   if (!entry?.active) return false;
 
   return Date.now() - entry.updatedAt < TYPING_TTL_SECONDS * 1000;
+}
+
+export async function seedMatchWelcome(
+  roomId: string,
+  nameA: string,
+  nameB: string,
+): Promise<void> {
+  const redis = getRedis();
+  const key = REDIS_KEYS.roomMessages(roomId);
+
+  if (redis) {
+    const existing = await redis.llen(key);
+    if (existing > 0) return;
+  } else {
+    const room = getMemoryRoom(roomId);
+    if (room.messages.length > 0) return;
+  }
+
+  await addChatMessage(
+    roomId,
+    "system",
+    `${nameA} and ${nameB} are connected. You're chatting with a real person — say hi!`,
+    { kind: "system" },
+  );
 }
 
 export function validateImageDataUrl(dataUrl: string): boolean {

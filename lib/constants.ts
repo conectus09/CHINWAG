@@ -16,6 +16,9 @@ export const LONG_POLL_TIMEOUT_MS = 12000;
 export const LONG_POLL_RETRY_MS = 60;
 export const MATCH_QUEUE_SCAN_LIMIT = 64;
 export const SKIP_COOLDOWN_MS = 1500;
+/** Drop queue entries if the user has not polled recently (ghost tabs). */
+export const WAITING_STALE_MS = 30_000;
+export const MATCHED_STALE_MS = 90_000;
 export const RECENT_PARTNER_LIMIT = 8;
 export const CHAT_TOPIC = "chinwag-chat";
 export const SYSTEM_TOPIC = "chinwag-system";

@@ -1,13 +1,17 @@
 import { nanoid } from "nanoid";
 import {
   MATCH_QUEUE_SCAN_LIMIT,
+  MATCHED_STALE_MS,
   RECENT_PARTNER_LIMIT,
   REDIS_KEYS,
   SKIP_COOLDOWN_MS,
+  WAITING_STALE_MS,
   type MatchResponse,
   type PublicUserProfile,
   type UserState,
+  type UserStatus,
 } from "./constants";
+import { seedMatchWelcome } from "./fallback-chat";
 import { estimateWaitSeconds, GUEST_DAILY_MATCH_LIMIT } from "./guest-constants";
 import {
   canGuestMatch,
@@ -272,6 +276,52 @@ async function pushToQueue(userId: string): Promise<void> {
   }
 }
 
+function liveThreshold(status: UserStatus): number {
+  if (status === "waiting") return WAITING_STALE_MS;
+  if (status === "matched") return MATCHED_STALE_MS;
+  return Number.POSITIVE_INFINITY;
+}
+
+async function isUserLive(userId: string): Promise<boolean> {
+  const state = await getUserState(userId);
+  if (state.status === "idle") return false;
+  return Date.now() - state.updatedAt < liveThreshold(state.status);
+}
+
+async function evictStaleUser(userId: string): Promise<void> {
+  const state = await getUserState(userId);
+  if (state.partnerId) {
+    await notifyPartnerLeft(state.partnerId);
+  }
+  await removeFromQueue(userId);
+  await setUserState(userId, defaultState());
+  await clearPublicProfile(userId);
+}
+
+async function pruneStaleQueue(): Promise<void> {
+  const redis = getRedis();
+  if (redis) {
+    const members = await redis.lrange(REDIS_KEYS.queue, 0, -1);
+    for (const userId of members) {
+      if (!(await isUserLive(userId))) {
+        await evictStaleUser(userId);
+      }
+    }
+    return;
+  }
+
+  for (const userId of [...matchStore.queue]) {
+    if (!(await isUserLive(userId))) {
+      await evictStaleUser(userId);
+    }
+  }
+}
+
+async function touchWaitingHeartbeat(userId: string, state: UserState): Promise<void> {
+  if (state.status !== "waiting") return;
+  await setUserState(userId, { ...state, updatedAt: Date.now() });
+}
+
 async function reconcileWaitingUser(userId: string): Promise<void> {
   const state = await getUserState(userId);
   if (state.status !== "waiting") return;
@@ -307,6 +357,12 @@ async function sanitizeUserState(userId: string): Promise<UserState> {
     partnerState.roomId === state.roomId;
 
   if (isMutual) {
+    if (!(await isUserLive(state.partnerId))) {
+      await notifyPartnerLeft(userId);
+      const healed = defaultState();
+      await setUserState(userId, healed);
+      return healed;
+    }
     return state;
   }
 
@@ -333,9 +389,19 @@ async function pruneStaleQueueEntry(userId: string): Promise<void> {
 
 async function isCandidateMatch(joinerId: string, candidate: string): Promise<boolean> {
   if (await isUserBanned(candidate)) return false;
+  if (!(await isUserLive(candidate))) return false;
 
   const recent = await getRecentPartners(joinerId);
   if (recent.includes(candidate)) return false;
+
+  const [joinerState, candidateState] = await Promise.all([
+    getUserState(joinerId),
+    getUserState(candidate),
+  ]);
+
+  if (joinerState.isGuest || candidateState.isGuest) {
+    return true;
+  }
 
   const [joinerPrefs, candidatePrefs] = await Promise.all([
     getUserPreferences(joinerId),
@@ -361,16 +427,17 @@ async function popValidWaitingUser(joinerId: string): Promise<string | null> {
       if (candidate === joinerId) continue;
 
       const candidateState = await getUserState(candidate);
-      if (
-        candidateState.status === "waiting" &&
-        (await isCandidateMatch(joinerId, candidate))
-      ) {
+      if (!(await isUserLive(candidate)) || candidateState.status !== "waiting") {
         await redis.lrem(REDIS_KEYS.queue, 1, candidate);
-        return candidate;
+        if (!(await isUserLive(candidate))) {
+          await evictStaleUser(candidate);
+        }
+        continue;
       }
 
-      if (candidateState.status !== "waiting") {
+      if (await isCandidateMatch(joinerId, candidate)) {
         await redis.lrem(REDIS_KEYS.queue, 1, candidate);
+        return candidate;
       }
     }
 
@@ -386,17 +453,17 @@ async function popValidWaitingUser(joinerId: string): Promise<string | null> {
     }
 
     const candidateState = await getUserState(candidate);
-    if (
-      candidateState.status === "waiting" &&
-      (await isCandidateMatch(joinerId, candidate))
-    ) {
+    if (!(await isUserLive(candidate)) || candidateState.status !== "waiting") {
       matchStore.queue.splice(index, 1);
-      return candidate;
+      if (!(await isUserLive(candidate))) {
+        await evictStaleUser(candidate);
+      }
+      continue;
     }
 
-    if (candidateState.status !== "waiting") {
+    if (await isCandidateMatch(joinerId, candidate)) {
       matchStore.queue.splice(index, 1);
-      continue;
+      return candidate;
     }
 
     index += 1;
@@ -449,6 +516,16 @@ async function matchPair(
   await rememberPartner(waitingUser, userId);
   await trackPresence(userId, "matched");
   await trackPresence(waitingUser, "matched");
+
+  const [profileA, profileB] = await Promise.all([
+    getPublicProfile(userId),
+    getPublicProfile(waitingUser),
+  ]);
+  await seedMatchWelcome(
+    roomId,
+    profileA?.name ?? "Guest",
+    profileB?.name ?? "Stranger",
+  );
 
   return enrichWithPartnerProfile(
     {
@@ -625,6 +702,7 @@ export async function attemptQueueMatch(
 
 export async function getMatchStatus(userId: string): Promise<MatchResponse> {
   const state = await sanitizeUserState(userId);
+  await touchWaitingHeartbeat(userId, state);
   await trackPresence(userId, state.status);
 
   const base: MatchResponse = {
@@ -707,6 +785,8 @@ export async function joinMatchQueue(
   const isGuest = options?.isGuest ?? false;
 
   return withMatchLock(async () => {
+    await pruneStaleQueue();
+
     if (options?.isSkip) {
       await setUserState(userId, {
         ...defaultState(),

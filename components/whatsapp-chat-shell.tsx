@@ -363,7 +363,14 @@ export function WhatsAppChatShell({
                   </p>
                 </div>
               ) : (
-                messages.map((message) => (
+                messages.map((message) =>
+                  message.kind === "system" ? (
+                    <div key={message.id} className="flex justify-center py-1">
+                      <p className="whatsapp-connected-banner text-center text-xs">
+                        {message.text}
+                      </p>
+                    </div>
+                  ) : (
                   <div
                     key={message.id}
                     className={cn(
@@ -424,7 +431,8 @@ export function WhatsAppChatShell({
                       </div>
                     </div>
                   </div>
-                ))
+                  ),
+                )
               )}
 
               {partnerLeftMessage && (
