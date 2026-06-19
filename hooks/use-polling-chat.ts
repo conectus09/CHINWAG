@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  CHAT_POLL_INTERVAL_MS,
   LONG_POLL_RETRY_MS,
   TYPING_HEARTBEAT_MS,
   TYPING_IDLE_MS,
@@ -35,8 +36,15 @@ export function usePollingChat({
   const lastTypingSentRef = useRef(0);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollLoopRef = useRef(0);
+  const longPollInFlightRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
   const { play } = useSoundNotification();
+
+  useEffect(() => {
+    if (enabled && partnerId) {
+      setIsConnected(true);
+    }
+  }, [enabled, partnerId]);
 
   const applySnapshot = useCallback(
     (data: {
@@ -165,27 +173,41 @@ export function usePollingChat({
     pollLoopRef.current = loopId;
     let cancelled = false;
 
-    async function pollLoop() {
+    const shortPoll = () => {
+      void pollOnce(false)
+        .catch(() => undefined);
+    };
+
+    async function longPollLoop() {
       while (!cancelled && pollLoopRef.current === loopId) {
+        if (longPollInFlightRef.current) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          continue;
+        }
+
+        longPollInFlightRef.current = true;
         try {
           await pollOnce(true);
         } catch {
           if (!cancelled) {
-            setIsConnected(false);
             await new Promise((resolve) =>
               setTimeout(resolve, LONG_POLL_RETRY_MS),
             );
           }
+        } finally {
+          longPollInFlightRef.current = false;
         }
       }
     }
 
-    void pollOnce(false).catch(() => setIsConnected(false));
-    void pollLoop();
+    shortPoll();
+    void longPollLoop();
+
+    const shortTimer = window.setInterval(shortPoll, CHAT_POLL_INTERVAL_MS);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void pollOnce(false).catch(() => undefined);
+        shortPoll();
       }
     };
 
@@ -193,6 +215,7 @@ export function usePollingChat({
 
     return () => {
       cancelled = true;
+      window.clearInterval(shortTimer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled, pollOnce]);

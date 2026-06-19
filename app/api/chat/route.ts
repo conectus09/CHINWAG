@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
           }
           return null;
         },
-        { intervalMs: 100, timeoutMs: LONG_POLL_TIMEOUT_MS },
+        { intervalMs: 80, timeoutMs: LONG_POLL_TIMEOUT_MS },
       );
 
       if (updated) {

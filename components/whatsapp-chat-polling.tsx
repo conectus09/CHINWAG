@@ -42,7 +42,13 @@ export function WhatsAppChatPolling({
   const partnerLeftShownRef = useRef(false);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const profile = getUserProfile();
+  const [profile, setProfile] = useState(() =>
+    typeof window === "undefined" ? null : getUserProfile(),
+  );
+
+  useEffect(() => {
+    setProfile(getUserProfile());
+  }, []);
 
   const {
     messages,
@@ -78,7 +84,8 @@ export function WhatsAppChatPolling({
   }, [remoteStream]);
 
   const partnerHasLeft = partnerLeftMessage != null;
-  const canSend = isConnected && !isLoading && !isSending && !partnerHasLeft;
+  const matchLinked = Boolean(partnerId) && !partnerHasLeft;
+  const canSend = matchLinked && !isLoading && !isSending;
 
   const showPartnerLeftNotice = useCallback(() => {
     if (partnerLeftShownRef.current) return;

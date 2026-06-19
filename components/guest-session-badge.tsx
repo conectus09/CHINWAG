@@ -1,12 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { getUserProfile } from "@/lib/user-profile";
+import { getUserProfile, type UserProfile } from "@/lib/user-profile";
 
 export function GuestSessionBadge() {
   const { isLoggedIn, session } = useAuth();
-  const profile = getUserProfile();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    setProfile(getUserProfile());
+  }, []);
 
   if (isLoggedIn && session) {
     return (

@@ -50,6 +50,7 @@ export function readGuestSession(): GuestSessionStats {
 }
 
 export function subscribeGuest(callback: () => void) {
+  if (typeof window === "undefined") return () => undefined;
   window.addEventListener("storage", callback);
   window.addEventListener("chinwag-guest-change", callback);
   return () => {

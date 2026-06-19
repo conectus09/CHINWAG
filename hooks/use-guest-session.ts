@@ -8,17 +8,19 @@ import {
   type GuestSessionStats,
 } from "@/lib/guest-session";
 
+const SERVER_GUEST_SNAPSHOT: GuestSessionStats = {
+  matchesToday: 0,
+  totalMatches: 0,
+  chatsStartedAt: 0,
+  soundEnabled: true,
+  lastIcebreaker: null,
+};
+
 export function useGuestSession() {
   const stats = useSyncExternalStore(
     subscribeGuest,
     readGuestSession,
-    (): GuestSessionStats => ({
-      matchesToday: 0,
-      totalMatches: 0,
-      chatsStartedAt: Date.now(),
-      soundEnabled: true,
-      lastIcebreaker: null,
-    }),
+    () => SERVER_GUEST_SNAPSHOT,
   );
 
   const remaining = Math.max(0, GUEST_DAILY_MATCH_LIMIT - stats.matchesToday);

@@ -120,7 +120,7 @@ export function WhatsAppChatShell({
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const partnerHasLeft = partnerLeftMessage != null;
-  const bothConnected = isConnected && partnerId != null && !partnerHasLeft;
+  const bothConnected = partnerId != null && !partnerHasLeft;
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
