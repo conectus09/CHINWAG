@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, MessageCircle, Play, Shield, Sparkles } from "lucide-react";
+import { AuthModal } from "@/components/auth-modal";
 import { ChatRoom } from "@/components/chat-room";
+import { GuestPerksCard } from "@/components/guest-perks-card";
+import { GuestSessionBadge } from "@/components/guest-session-badge";
 import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { StartGateModal } from "@/components/start-gate-modal";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { WaitingScreen } from "@/components/waiting-screen";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 import { useMatch } from "@/hooks/use-match";
 import { useUserId } from "@/hooks/use-user-id";
 import { hasCompletedStartGate } from "@/lib/user-profile";
@@ -17,8 +21,10 @@ import { hasCompletedStartGate } from "@/lib/user-profile";
 export default function ChatPage() {
   const router = useRouter();
   const userId = useUserId();
+  const { isLoggedIn } = useAuth();
   const [gatePassed, setGatePassed] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
     if (hasCompletedStartGate()) {
@@ -36,6 +42,8 @@ export default function ChatPage() {
     partnerAge,
     queuePosition,
     queueAhead,
+    estimatedWaitSec,
+    guestRemaining,
     commonInterests,
     icebreaker,
     error,
@@ -77,6 +85,16 @@ export default function ChatPage() {
         onComplete={handleGateComplete}
       />
 
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        notice={
+          guestRemaining === 0
+            ? "Daily guest limit reached. Login for unlimited matches."
+            : null
+        }
+      />
+
       {(phase === "matched" || phase === "partner_left") && roomId ? (
         <div className="fixed inset-0 z-40 flex flex-col">
           <ChatRoom
@@ -113,7 +131,10 @@ export default function ChatPage() {
                 </Link>
               </div>
 
-              <LiveOnlineCounter className="stranger-chat-header-live" />
+              <div className="stranger-chat-header-center">
+                <GuestSessionBadge />
+                <LiveOnlineCounter className="stranger-chat-header-live" />
+              </div>
 
               <div className="stranger-chat-header-theme">
                 <ThemeSwitcher variant="header" />
@@ -132,10 +153,11 @@ export default function ChatPage() {
                 isLoading={isLoading}
                 queuePosition={queuePosition}
                 queueAhead={queueAhead}
+                estimatedWaitSec={estimatedWaitSec}
               />
             )}
 
-            {phase === "idle" && !isLoading && gatePassed && (
+            {phase === "idle" && !isLoading && gatePassed && guestRemaining !== 0 && (
               <div className="stranger-lobby">
                 <div className="stranger-lobby-card">
                   <div className="stranger-lobby-badge">
@@ -172,6 +194,34 @@ export default function ChatPage() {
                   <p className="stranger-lobby-footnote">
                     By continuing you agree to chat respectfully. Misuse can be reported.
                   </p>
+
+                  {!isLoggedIn && (
+                    <div className="stranger-lobby-guest-perks">
+                      <GuestPerksCard
+                        compact
+                        onLogin={() => setAuthOpen(true)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {phase === "idle" && guestRemaining === 0 && !isLoggedIn && (
+              <div className="stranger-lobby">
+                <div className="stranger-lobby-card">
+                  <h2 className="stranger-lobby-title">Daily limit reached</h2>
+                  <p className="stranger-lobby-copy">
+                    You&apos;ve used all 30 guest matches for today. Login for unlimited
+                    matching — it&apos;s free.
+                  </p>
+                  <Button
+                    onClick={() => setAuthOpen(true)}
+                    size="lg"
+                    className="stranger-lobby-cta w-full"
+                  >
+                    Login / Sign up
+                  </Button>
                 </div>
               </div>
             )}

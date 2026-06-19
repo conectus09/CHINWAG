@@ -8,6 +8,8 @@ import {
 } from "@/lib/constants";
 import type { ChatMessage } from "@/components/whatsapp-chat-shell";
 import { useSoundNotification } from "@/hooks/use-sound-notification";
+import { readAuthSession } from "@/lib/auth-client";
+import { readGuestSession } from "@/lib/guest-session";
 
 interface UsePollingChatOptions {
   roomId: string;
@@ -68,7 +70,10 @@ export function usePollingChat({
             }
 
             if (!knownIdsRef.current.has(message.id) && message.sender !== userId) {
-              play();
+              const isGuest = !readAuthSession();
+              if (!isGuest || readGuestSession().soundEnabled) {
+                play();
+              }
             }
             knownIdsRef.current.add(message.id);
 

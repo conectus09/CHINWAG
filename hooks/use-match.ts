@@ -7,6 +7,8 @@ import {
   MATCH_POLL_INTERVAL_MS,
   type MatchResponse,
 } from "@/lib/constants";
+import { readAuthSession } from "@/lib/auth-client";
+import { recordGuestMatch } from "@/lib/guest-session";
 import { getMatchPreferences, getUserProfile } from "@/lib/user-profile";
 
 type MatchPhase = "idle" | "waiting" | "matched" | "partner_left";
@@ -26,6 +28,8 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   const [queueAhead, setQueueAhead] = useState<number | null>(null);
   const [commonInterests, setCommonInterests] = useState<string[]>([]);
   const [icebreaker, setIcebreaker] = useState<string | null>(null);
+  const [estimatedWaitSec, setEstimatedWaitSec] = useState<number | null>(null);
+  const [guestRemaining, setGuestRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,6 +41,8 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
       return;
     }
 
+    const wasMatched = data.status === "matched";
+
     setRoomId(data.roomId ?? null);
     setPartnerId(data.partnerId ?? null);
     setPartnerName(data.partnerName ?? null);
@@ -45,18 +51,26 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     setQueueAhead(data.queueAhead ?? null);
     setCommonInterests(data.commonInterests ?? []);
     setIcebreaker(data.icebreaker ?? null);
+    setEstimatedWaitSec(data.estimatedWaitSec ?? null);
+    setGuestRemaining(data.guestRemaining ?? null);
     if (data.error) {
       setError(data.error);
     }
     setPhase(data.status === "idle" ? "idle" : data.status);
+
+    if (wasMatched && !readAuthSession()) {
+      recordGuestMatch();
+    }
   }, []);
 
   const buildMatchBody = useCallback(
     (action: "join" | "next" | "leave") => {
       const profile = getUserProfile();
+      const isGuest = !readAuthSession();
       return {
         userId,
         action,
+        isGuest,
         ...(profile ? { profile: { name: profile.name, age: profile.age } } : {}),
         preferences: getMatchPreferences(),
       };
@@ -253,6 +267,8 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     queueAhead,
     commonInterests,
     icebreaker,
+    estimatedWaitSec,
+    guestRemaining,
     error,
     isLoading,
     joinQueue,

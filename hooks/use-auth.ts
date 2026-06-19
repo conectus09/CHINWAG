@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { readAuthSession } from "@/lib/auth-client";
 import { readAuthLoggedIn, subscribeAuth } from "@/lib/auth-session";
 
 export function useAuth() {
@@ -10,5 +11,11 @@ export function useAuth() {
     () => false,
   );
 
-  return { isLoggedIn };
+  const session = useSyncExternalStore(
+    subscribeAuth,
+    readAuthSession,
+    () => null,
+  );
+
+  return { isLoggedIn, session };
 }

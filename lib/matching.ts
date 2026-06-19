@@ -8,6 +8,12 @@ import {
   type PublicUserProfile,
   type UserState,
 } from "./constants";
+import { estimateWaitSeconds, GUEST_DAILY_MATCH_LIMIT } from "./guest-constants";
+import {
+  canGuestMatch,
+  getGuestMatchCount,
+  incrementGuestMatchCount,
+} from "./guest-limits";
 import { commonInterests, randomIcebreaker } from "./icebreakers";
 import { isUserBanned, recordReport } from "./moderation";
 import {
@@ -153,6 +159,28 @@ async function getQueuePosition(userId: string): Promise<{
   return { position: index + 1, ahead: index };
 }
 
+async function withGuestMeta(
+  response: MatchResponse,
+  userId: string,
+): Promise<MatchResponse> {
+  const state = await getUserState(userId);
+  if (!state.isGuest) return response;
+
+  const count = await getGuestMatchCount(userId);
+  const enriched: MatchResponse = {
+    ...response,
+    guestMatchesToday: count,
+    guestDailyLimit: GUEST_DAILY_MATCH_LIMIT,
+    guestRemaining: Math.max(0, GUEST_DAILY_MATCH_LIMIT - count),
+  };
+
+  if (response.status === "waiting") {
+    enriched.estimatedWaitSec = estimateWaitSeconds(response.queueAhead ?? 0);
+  }
+
+  return enriched;
+}
+
 async function enrichWithPartnerProfile(
   response: MatchResponse,
   userId?: string,
@@ -176,6 +204,7 @@ async function enrichWithPartnerProfile(
     const shared = commonInterests(myPrefs.interests, partnerPrefs.interests);
     if (shared.length > 0) enriched.commonInterests = shared;
     enriched.icebreaker = randomIcebreaker();
+    return withGuestMeta(enriched, userId);
   }
 
   return enriched;
@@ -385,16 +414,37 @@ function buildMatchedState(roomId: string, partnerId: string): UserState {
   };
 }
 
+async function maybeIncrementGuestMatch(userId: string): Promise<void> {
+  const state = await getUserState(userId);
+  if (state.isGuest) {
+    await incrementGuestMatchCount(userId);
+  }
+}
+
 async function matchPair(
   userId: string,
   waitingUser: string,
 ): Promise<MatchResponse> {
   const roomId = `chinwag-${nanoid(12)}`;
+  const [userState, partnerState] = await Promise.all([
+    getUserState(userId),
+    getUserState(waitingUser),
+  ]);
 
   await removeFromQueue(userId);
   await removeFromQueue(waitingUser);
-  await setUserState(userId, buildMatchedState(roomId, waitingUser));
-  await setUserState(waitingUser, buildMatchedState(roomId, userId));
+  await setUserState(userId, {
+    ...buildMatchedState(roomId, waitingUser),
+    isGuest: userState.isGuest,
+  });
+  await setUserState(waitingUser, {
+    ...buildMatchedState(roomId, userId),
+    isGuest: partnerState.isGuest,
+  });
+  await Promise.all([
+    maybeIncrementGuestMatch(userId),
+    maybeIncrementGuestMatch(waitingUser),
+  ]);
   await rememberPartner(userId, waitingUser);
   await rememberPartner(waitingUser, userId);
   await trackPresence(userId, "matched");
@@ -471,12 +521,14 @@ async function joinMatchQueueMemory(userId: string): Promise<MatchResponse> {
     return matchPair(userId, waitingUser);
   }
 
+  const guestFlag = (await getUserState(userId)).isGuest;
   await pushToQueue(userId);
   await setUserState(userId, {
     status: "waiting",
     roomId: null,
     partnerId: null,
     updatedAt: Date.now(),
+    isGuest: guestFlag,
   });
 
   await drainMatchQueue();
@@ -492,11 +544,14 @@ async function joinMatchQueueMemory(userId: string): Promise<MatchResponse> {
 
   const queue = await getQueuePosition(userId);
   await trackPresence(userId, "waiting");
-  return {
-    status: "waiting",
-    queuePosition: queue?.position,
-    queueAhead: queue?.ahead,
-  };
+  return withGuestMeta(
+    {
+      status: "waiting",
+      queuePosition: queue?.position,
+      queueAhead: queue?.ahead,
+    },
+    userId,
+  );
 }
 
 async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
@@ -526,12 +581,14 @@ async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
     return matchPair(userId, waitingUser);
   }
 
+  const guestFlag = (await getUserState(userId)).isGuest;
   await pushToQueue(userId);
   await setUserState(userId, {
     status: "waiting",
     roomId: null,
     partnerId: null,
     updatedAt: Date.now(),
+    isGuest: guestFlag,
   });
 
   await drainMatchQueue();
@@ -547,11 +604,14 @@ async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
 
   const queue = await getQueuePosition(userId);
   await trackPresence(userId, "waiting");
-  return {
-    status: "waiting",
-    queuePosition: queue?.position,
-    queueAhead: queue?.ahead,
-  };
+  return withGuestMeta(
+    {
+      status: "waiting",
+      queuePosition: queue?.position,
+      queueAhead: queue?.ahead,
+    },
+    userId,
+  );
 }
 
 export async function attemptQueueMatch(
@@ -577,6 +637,7 @@ export async function getMatchStatus(userId: string): Promise<MatchResponse> {
     const queue = await getQueuePosition(userId);
     base.queuePosition = queue?.position;
     base.queueAhead = queue?.ahead;
+    return withGuestMeta(base, userId);
   }
 
   return enrichWithPartnerProfile(base, userId);
@@ -598,7 +659,7 @@ export async function joinMatchQueue(
   userId: string,
   profileInput?: { name?: string; age?: number } | null,
   preferencesInput?: Partial<MatchPreferences> | null,
-  options?: { isSkip?: boolean },
+  options?: { isSkip?: boolean; isGuest?: boolean },
 ): Promise<MatchResponse> {
   if (!userId || userId.length < 8) {
     throw new Error("Invalid user id");
@@ -606,6 +667,20 @@ export async function joinMatchQueue(
 
   if (await isUserBanned(userId)) {
     return { status: "idle", error: "Account temporarily restricted" };
+  }
+
+  if (options?.isGuest) {
+    const allowed = await canGuestMatch(userId);
+    if (!allowed) {
+      const count = await getGuestMatchCount(userId);
+      return {
+        status: "idle",
+        error: `Daily guest limit reached (${GUEST_DAILY_MATCH_LIMIT} matches). Login for unlimited.`,
+        guestMatchesToday: count,
+        guestDailyLimit: GUEST_DAILY_MATCH_LIMIT,
+        guestRemaining: 0,
+      };
+    }
   }
 
   const current = await getUserState(userId);
@@ -629,12 +704,18 @@ export async function joinMatchQueue(
     await setUserPreferences(userId, preferencesInput);
   }
 
+  const isGuest = options?.isGuest ?? false;
+
   return withMatchLock(async () => {
     if (options?.isSkip) {
       await setUserState(userId, {
         ...defaultState(),
         lastSkipAt: Date.now(),
+        isGuest,
       });
+    } else if (isGuest) {
+      const state = await getUserState(userId);
+      await setUserState(userId, { ...state, isGuest: true });
     }
 
     const redis = getRedis();

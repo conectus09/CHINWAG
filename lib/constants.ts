@@ -46,6 +46,7 @@ export const REDIS_KEYS = {
   roomMessages: (roomId: string) => `chinwag:room:${roomId}:messages`,
   roomTyping: (roomId: string, userId: string) =>
     `chinwag:room:${roomId}:typing:${userId}`,
+  guestMatches: (userId: string) => `chinwag:guest:matches:${userId}`,
 } as const;
 
 export type { ChatMessagePayload } from "./platform-types";
@@ -63,6 +64,7 @@ export interface UserState {
   partnerId: string | null;
   updatedAt: number;
   lastSkipAt?: number;
+  isGuest?: boolean;
 }
 
 export interface MatchResponse {
@@ -76,4 +78,8 @@ export interface MatchResponse {
   commonInterests?: string[];
   icebreaker?: string;
   error?: string;
+  guestMatchesToday?: number;
+  guestDailyLimit?: number;
+  guestRemaining?: number;
+  estimatedWaitSec?: number;
 }

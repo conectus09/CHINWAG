@@ -1,13 +1,16 @@
 "use client";
 
 import { Radio, X } from "lucide-react";
+import { GuestWaitingExtras } from "@/components/guest-waiting-extras";
 import { LiveOnlineCounter } from "@/components/live-online-counter";
+import { useAuth } from "@/hooks/use-auth";
 
 interface WaitingScreenProps {
   onCancel: () => void;
   isLoading?: boolean;
   queuePosition?: number | null;
   queueAhead?: number | null;
+  estimatedWaitSec?: number | null;
 }
 
 export function WaitingScreen({
@@ -15,7 +18,10 @@ export function WaitingScreen({
   isLoading,
   queuePosition,
   queueAhead,
+  estimatedWaitSec,
 }: WaitingScreenProps) {
+  const { isLoggedIn } = useAuth();
+
   return (
     <div className="stranger-waiting">
       <div className="stranger-waiting-card">
@@ -57,6 +63,13 @@ export function WaitingScreen({
         <div className="flex justify-center py-2">
           <LiveOnlineCounter />
         </div>
+
+        {!isLoggedIn && (
+          <GuestWaitingExtras
+            queueAhead={queueAhead}
+            estimatedWaitSec={estimatedWaitSec}
+          />
+        )}
 
         <div className="stranger-waiting-progress" aria-hidden>
           <span className="stranger-waiting-progress-bar" />

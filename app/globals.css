@@ -4236,3 +4236,181 @@ body.start-gate-open > :not(.start-gate-overlay):not(.start-gate-shell) {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
+
+/* ── Guest mode UI ── */
+
+.stranger-chat-header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  justify-self: center;
+}
+
+.guest-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-hover);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.guest-badge-member {
+  border-color: var(--accent-border);
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.guest-perks {
+  margin-top: 1rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--accent-border) 45%, var(--border));
+  background: color-mix(in srgb, var(--card) 92%, var(--accent) 8%);
+  text-align: left;
+}
+
+.guest-perks-compact {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.75rem;
+}
+
+.guest-perks-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.guest-perks-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.guest-perks-sub {
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.guest-perks-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 420px) {
+  .guest-perks:not(.guest-perks-compact) .guest-perks-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.guest-perks-col-title {
+  margin-bottom: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.guest-perks-list {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.guest-perks-list-muted {
+  color: var(--muted);
+}
+
+.guest-perks-safety {
+  margin-top: 0.65rem;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--muted) 90%, transparent);
+}
+
+.guest-perks-login {
+  margin-top: 0.65rem;
+  border-color: var(--accent-border);
+}
+
+.stranger-lobby-guest-perks {
+  margin-top: 0.5rem;
+  text-align: left;
+}
+
+.guest-waiting-extras {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  text-align: left;
+}
+
+.guest-waiting-estimate {
+  margin-bottom: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
+}
+
+.guest-waiting-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--border);
+  background: var(--card-hover);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.guest-waiting-icebreaker {
+  margin-bottom: 0.55rem;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.guest-waiting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.guest-waiting-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.guest-waiting-action:hover {
+  border-color: var(--accent-border);
+  color: var(--foreground);
+}
+
+.guest-waiting-share-msg {
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  color: var(--accent);
+  text-align: center;
+}

@@ -64,9 +64,10 @@ export async function POST(request: NextRequest) {
       action?: "join" | "next" | "leave";
       profile?: { name?: string; age?: number };
       preferences?: Partial<MatchPreferences>;
+      isGuest?: boolean;
     };
 
-    const { userId, action = "join", profile, preferences } = body;
+    const { userId, action = "join", profile, preferences, isGuest } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
       await leaveMatch(userId);
       let result = await joinMatchQueue(userId, profile, preferences, {
         isSkip: true,
+        isGuest,
       });
       if (result.status === "waiting") {
         const matched = await attemptQueueMatch(userId);
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result);
     }
 
-    let result = await joinMatchQueue(userId, profile, preferences);
+    let result = await joinMatchQueue(userId, profile, preferences, { isGuest });
     if (result.status === "waiting") {
       const matched = await attemptQueueMatch(userId);
       if (matched) result = matched;
