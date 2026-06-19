@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  LONG_POLL_RETRY_MS,
   MATCH_BURST_POLL_MS,
   MATCH_POLL_INTERVAL_MS,
   type MatchResponse,
@@ -24,6 +25,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const longPollLoopRef = useRef(0);
 
   const applyResponse = useCallback((data: MatchResponse) => {
     if (data.status === "partner_left") {
@@ -55,30 +57,37 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+    longPollLoopRef.current += 1;
   }, []);
 
-  const fetchStatus = useCallback(async () => {
-    if (!userId) return null;
+  const fetchStatus = useCallback(
+    async (useLongPoll = false) => {
+      if (!userId) return null;
 
-    const response = await fetch(`/api/match?userId=${encodeURIComponent(userId)}`);
-    if (!response.ok) {
-      throw new Error("Failed to fetch match status");
-    }
+      const params = new URLSearchParams({ userId });
+      if (useLongPoll) params.set("wait", "1");
 
-    const data = (await response.json()) as MatchResponse;
-    applyResponse(data);
+      const response = await fetch(`/api/match?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch match status");
+      }
 
-    if (data.status === "idle") {
-      stopPolling();
-    }
+      const data = (await response.json()) as MatchResponse;
+      applyResponse(data);
 
-    return data;
-  }, [applyResponse, stopPolling, userId]);
+      if (data.status === "idle") {
+        stopPolling();
+      }
+
+      return data;
+    },
+    [applyResponse, stopPolling, userId],
+  );
 
   const startPolling = useCallback(() => {
     stopPolling();
     pollingRef.current = setInterval(() => {
-      void fetchStatus().catch((err: unknown) => {
+      void fetchStatus(false).catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Polling failed");
       });
     }, MATCH_POLL_INTERVAL_MS);
@@ -183,17 +192,35 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   useEffect(() => {
     if (phase !== "waiting" || !userId) return;
 
-    void fetchStatus();
+    const loopId = longPollLoopRef.current + 1;
+    longPollLoopRef.current = loopId;
+    let cancelled = false;
+
+    void fetchStatus(false);
 
     const burst = window.setInterval(() => {
-      void fetchStatus().catch(() => undefined);
+      void fetchStatus(false).catch(() => undefined);
     }, MATCH_BURST_POLL_MS);
+
+    async function longPollLoop() {
+      while (!cancelled && longPollLoopRef.current === loopId) {
+        try {
+          const data = await fetchStatus(true);
+          if (!data || data.status !== "waiting") break;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, LONG_POLL_RETRY_MS));
+        }
+      }
+    }
+
+    void longPollLoop();
 
     const stopBurst = window.setTimeout(() => {
       window.clearInterval(burst);
-    }, 6000);
+    }, 20000);
 
     return () => {
+      cancelled = true;
       window.clearInterval(burst);
       window.clearTimeout(stopBurst);
     };
@@ -203,7 +230,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     if (phase !== "partner_left") return;
     const timer = window.setTimeout(() => {
       void findNext();
-    }, 3500);
+    }, 700);
     return () => window.clearTimeout(timer);
   }, [findNext, phase]);
 

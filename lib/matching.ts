@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import {
+  MATCH_QUEUE_SCAN_LIMIT,
   REDIS_KEYS,
   type MatchResponse,
   type PublicUserProfile,
@@ -150,14 +151,35 @@ async function removeFromQueue(userId: string): Promise<void> {
   if (index !== -1) matchStore.queue.splice(index, 1);
 }
 
+async function isInQueue(userId: string): Promise<boolean> {
+  const redis = getRedis();
+  if (redis) {
+    const position = await redis.lpos(REDIS_KEYS.queue, userId);
+    return position !== null;
+  }
+  return matchStore.queue.includes(userId);
+}
+
 async function pushToQueue(userId: string): Promise<void> {
   const redis = getRedis();
   if (redis) {
-    await redis.rpush(REDIS_KEYS.queue, userId);
+    const position = await redis.lpos(REDIS_KEYS.queue, userId);
+    if (position === null) {
+      await redis.rpush(REDIS_KEYS.queue, userId);
+    }
     return;
   }
   if (!matchStore.queue.includes(userId)) {
     matchStore.queue.push(userId);
+  }
+}
+
+async function reconcileWaitingUser(userId: string): Promise<void> {
+  const state = await getUserState(userId);
+  if (state.status !== "waiting") return;
+
+  if (!(await isInQueue(userId))) {
+    await pushToQueue(userId);
   }
 }
 
@@ -195,29 +217,61 @@ async function sanitizeUserState(userId: string): Promise<UserState> {
   return healed;
 }
 
+async function removeQueueEntry(userId: string): Promise<void> {
+  const redis = getRedis();
+  if (redis) {
+    await redis.lrem(REDIS_KEYS.queue, 1, userId);
+    return;
+  }
+  const index = matchStore.queue.indexOf(userId);
+  if (index !== -1) matchStore.queue.splice(index, 1);
+}
+
+async function pruneStaleQueueEntry(userId: string): Promise<void> {
+  const state = await getUserState(userId);
+  if (state.status === "waiting") return;
+  await removeQueueEntry(userId);
+}
+
 async function popValidWaitingUser(joinerId: string): Promise<string | null> {
   const redis = getRedis();
   if (redis) {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const candidate = await redis.lpop(REDIS_KEYS.queue);
-      if (!candidate || candidate === joinerId) continue;
+    const candidates = await redis.lrange(
+      REDIS_KEYS.queue,
+      0,
+      MATCH_QUEUE_SCAN_LIMIT - 1,
+    );
+
+    for (const candidate of candidates) {
+      if (candidate === joinerId) continue;
 
       const candidateState = await getUserState(candidate);
       if (candidateState.status === "waiting") {
+        await redis.lrem(REDIS_KEYS.queue, 1, candidate);
         return candidate;
       }
+
+      await redis.lrem(REDIS_KEYS.queue, 1, candidate);
     }
+
     return null;
   }
 
-  while (matchStore.queue.length > 0) {
-    const candidate = matchStore.queue.shift();
-    if (!candidate || candidate === joinerId) continue;
+  let index = 0;
+  while (index < matchStore.queue.length) {
+    const candidate = matchStore.queue[index];
+    if (!candidate || candidate === joinerId) {
+      index += 1;
+      continue;
+    }
 
     const candidateState = await getUserState(candidate);
     if (candidateState.status === "waiting") {
+      matchStore.queue.splice(index, 1);
       return candidate;
     }
+
+    matchStore.queue.splice(index, 1);
   }
 
   return null;
@@ -238,6 +292,8 @@ async function matchPair(
 ): Promise<MatchResponse> {
   const roomId = `chinwag-${nanoid(12)}`;
 
+  await removeFromQueue(userId);
+  await removeFromQueue(waitingUser);
   await setUserState(userId, buildMatchedState(roomId, waitingUser));
   await setUserState(waitingUser, buildMatchedState(roomId, userId));
 
@@ -246,6 +302,44 @@ async function matchPair(
     roomId,
     partnerId: waitingUser,
   });
+}
+
+async function tryMatchFromQueue(userId: string): Promise<MatchResponse | null> {
+  const state = await getUserState(userId);
+  if (state.status !== "waiting") return null;
+
+  await reconcileWaitingUser(userId);
+
+  const partnerId = await popValidWaitingUser(userId);
+  if (!partnerId) return null;
+
+  return matchPair(userId, partnerId);
+}
+
+async function drainMatchQueue(): Promise<void> {
+  let safety = 0;
+
+  while (safety < 32) {
+    safety += 1;
+
+    const redis = getRedis();
+    const nextUser = redis
+      ? (await redis.lrange(REDIS_KEYS.queue, 0, 0))[0]
+      : matchStore.queue[0];
+
+    if (!nextUser) break;
+
+    const state = await getUserState(nextUser);
+    if (state.status !== "waiting") {
+      await pruneStaleQueueEntry(nextUser);
+      continue;
+    }
+
+    const partnerId = await popValidWaitingUser(nextUser);
+    if (!partnerId) break;
+
+    await matchPair(nextUser, partnerId);
+  }
 }
 
 async function joinMatchQueueMemory(userId: string): Promise<MatchResponse> {
@@ -278,6 +372,17 @@ async function joinMatchQueueMemory(userId: string): Promise<MatchResponse> {
     partnerId: null,
     updatedAt: Date.now(),
   });
+
+  await drainMatchQueue();
+
+  const refreshed = await getUserState(userId);
+  if (refreshed.status === "matched" && refreshed.roomId && refreshed.partnerId) {
+    return enrichWithPartnerProfile({
+      status: "matched",
+      roomId: refreshed.roomId,
+      partnerId: refreshed.partnerId,
+    });
+  }
 
   return { status: "waiting" };
 }
@@ -317,7 +422,27 @@ async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
     updatedAt: Date.now(),
   });
 
+  await drainMatchQueue();
+
+  const refreshed = await getUserState(userId);
+  if (refreshed.status === "matched" && refreshed.roomId && refreshed.partnerId) {
+    return enrichWithPartnerProfile({
+      status: "matched",
+      roomId: refreshed.roomId,
+      partnerId: refreshed.partnerId,
+    });
+  }
+
   return { status: "waiting" };
+}
+
+export async function attemptQueueMatch(
+  userId: string,
+): Promise<MatchResponse | null> {
+  return withMatchLock(async () => {
+    await reconcileWaitingUser(userId);
+    return tryMatchFromQueue(userId);
+  });
 }
 
 export async function getMatchStatus(userId: string): Promise<MatchResponse> {

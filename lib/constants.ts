@@ -8,9 +8,12 @@ export const CONTACT_PHONE = "+91 8287735448";
 export const CONTACT_PHONE_HREF = "tel:+918287735448";
 export const LEGAL_LAST_UPDATED = "17 June 2026";
 
-export const MATCH_POLL_INTERVAL_MS = 800;
-export const MATCH_BURST_POLL_MS = 400;
-export const CHAT_POLL_INTERVAL_MS = 1200;
+export const MATCH_POLL_INTERVAL_MS = 250;
+export const MATCH_BURST_POLL_MS = 80;
+export const CHAT_POLL_INTERVAL_MS = 400;
+export const LONG_POLL_TIMEOUT_MS = 25000;
+export const LONG_POLL_RETRY_MS = 120;
+export const MATCH_QUEUE_SCAN_LIMIT = 48;
 export const CHAT_TOPIC = "chinwag-chat";
 export const SYSTEM_TOPIC = "chinwag-system";
 export const TYPING_IDLE_MS = 1500;

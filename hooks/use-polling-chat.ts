@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CHAT_POLL_INTERVAL_MS,
+  LONG_POLL_RETRY_MS,
   TYPING_HEARTBEAT_MS,
   TYPING_IDLE_MS,
 } from "@/lib/constants";
@@ -31,6 +31,68 @@ export function usePollingChat({
   const isTypingRef = useRef(false);
   const lastTypingSentRef = useRef(0);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollLoopRef = useRef(0);
+
+  const applySnapshot = useCallback(
+    (data: {
+      messages: Array<{
+        id: string;
+        sender: string;
+        text: string;
+        timestamp: number;
+      }>;
+      partnerTyping: boolean;
+    }) => {
+      setIsConnected(true);
+      setPartnerTyping(data.partnerTyping);
+
+      if (data.messages.length > 0) {
+        setMessages((prev) => {
+          const merged = [...prev];
+          for (const message of data.messages) {
+            if (merged.some((entry) => entry.id === message.id)) continue;
+            merged.push({
+              ...message,
+              isLocal: message.sender === userId,
+            });
+            lastTimestampRef.current = Math.max(
+              lastTimestampRef.current,
+              message.timestamp,
+            );
+          }
+          return merged;
+        });
+      }
+    },
+    [userId],
+  );
+
+  const pollOnce = useCallback(
+    async (useLongPoll: boolean) => {
+      const params = new URLSearchParams({
+        roomId,
+        since: String(lastTimestampRef.current),
+      });
+      if (partnerId) params.set("partnerId", partnerId);
+      if (useLongPoll) params.set("wait", "1");
+
+      const response = await fetch(`/api/chat?${params.toString()}`);
+      if (!response.ok) throw new Error("Poll failed");
+
+      const data = (await response.json()) as {
+        messages: Array<{
+          id: string;
+          sender: string;
+          text: string;
+          timestamp: number;
+        }>;
+        partnerTyping: boolean;
+      };
+
+      applySnapshot(data);
+    },
+    [applySnapshot, partnerId, roomId],
+  );
 
   const sendTyping = useCallback(
     async (active: boolean) => {
@@ -68,68 +130,41 @@ export function usePollingChat({
   useEffect(() => {
     if (!enabled) return;
 
+    const loopId = pollLoopRef.current + 1;
+    pollLoopRef.current = loopId;
     let cancelled = false;
 
-    async function poll() {
-      try {
-        const params = new URLSearchParams({
-          roomId,
-          since: String(lastTimestampRef.current),
-        });
-        if (partnerId) params.set("partnerId", partnerId);
-
-        const response = await fetch(`/api/chat?${params.toString()}`);
-        if (!response.ok) throw new Error("Poll failed");
-
-        const data = (await response.json()) as {
-          messages: Array<{
-            id: string;
-            sender: string;
-            text: string;
-            timestamp: number;
-          }>;
-          partnerTyping: boolean;
-        };
-
-        if (cancelled) return;
-
-        setIsConnected(true);
-        setPartnerTyping(data.partnerTyping);
-
-        if (data.messages.length > 0) {
-          setMessages((prev) => {
-            const merged = [...prev];
-            for (const message of data.messages) {
-              if (merged.some((entry) => entry.id === message.id)) continue;
-              merged.push({
-                ...message,
-                isLocal: message.sender === userId,
-              });
-              lastTimestampRef.current = Math.max(
-                lastTimestampRef.current,
-                message.timestamp,
-              );
-            }
-            return merged;
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          setIsConnected(false);
+    async function pollLoop() {
+      while (!cancelled && pollLoopRef.current === loopId) {
+        try {
+          await pollOnce(true);
+        } catch {
+          if (!cancelled) {
+            setIsConnected(false);
+            await new Promise((resolve) =>
+              setTimeout(resolve, LONG_POLL_RETRY_MS),
+            );
+          }
         }
       }
     }
 
-    void poll();
-    const timer = window.setInterval(() => {
-      void poll();
-    }, CHAT_POLL_INTERVAL_MS);
+    void pollOnce(false).catch(() => setIsConnected(false));
+    void pollLoop();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void pollOnce(false).catch(() => undefined);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [enabled, partnerId, roomId, userId]);
+  }, [enabled, pollOnce]);
 
   const handleDraftChange = useCallback(
     (value: string, canSend: boolean) => {
@@ -209,6 +244,8 @@ export function usePollingChat({
           ];
         });
 
+        void pollOnce(true).catch(() => undefined);
+
         return true;
       } catch {
         setSendError("Message failed to send. Try again.");
@@ -217,7 +254,7 @@ export function usePollingChat({
         setIsSending(false);
       }
     },
-    [roomId, stopLocalTyping, userId],
+    [pollOnce, roomId, stopLocalTyping, userId],
   );
 
   useEffect(

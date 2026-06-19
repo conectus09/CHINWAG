@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePollingChat } from "@/hooks/use-polling-chat";
 import { WhatsAppChatShell } from "@/components/whatsapp-chat-shell";
+import { getUserProfile } from "@/lib/user-profile";
 import { cn } from "@/lib/utils";
 
 interface WhatsAppChatPollingProps {
@@ -35,6 +36,7 @@ export function WhatsAppChatPolling({
     null,
   );
   const partnerLeftShownRef = useRef(false);
+  const profile = getUserProfile();
 
   const {
     messages,
@@ -63,26 +65,52 @@ export function WhatsAppChatPolling({
     }
   }, [partnerLeft, showPartnerLeftNotice]);
 
+  const handleReport = useCallback(
+    async (reason: string) => {
+      const response = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reporterId: userId,
+          reportedId: partnerId ?? undefined,
+          roomId,
+          reason,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error ?? "Report failed");
+      }
+    },
+    [partnerId, roomId, userId],
+  );
+
   const statusText = partnerTyping
     ? "typing..."
-    : isConnected
+    : isConnected && partnerId
       ? "online"
       : "connecting...";
 
   const statusClassName = partnerTyping
     ? "text-sky-400"
-    : isConnected
+    : isConnected && partnerId
       ? "text-emerald-400"
       : "text-amber-400";
 
   return (
     <WhatsAppChatShell
+      userId={userId}
+      partnerId={partnerId}
+      localName={profile?.name}
+      localAge={profile?.age}
       partnerName={partnerName}
       partnerAge={partnerAge}
       partnerLeftMessage={partnerLeftMessage}
       partnerTyping={partnerTyping}
       statusText={statusText}
       statusClassName={cn(statusClassName)}
+      isConnected={isConnected}
       messages={messages}
       draft={draft}
       onDraftChange={(value) => {
@@ -101,6 +129,7 @@ export function WhatsAppChatPolling({
       onNext={onNext}
       onEndChat={onEndChat}
       onBack={onBack}
+      onReport={handleReport}
       isLoading={isLoading}
     />
   );
