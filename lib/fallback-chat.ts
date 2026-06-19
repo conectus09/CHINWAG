@@ -1,10 +1,13 @@
 import { nanoid } from "nanoid";
-import { type ChatMessagePayload, REDIS_KEYS } from "./constants";
+import { REDIS_KEYS } from "./constants";
+import { filterMessage } from "./moderation";
+import type { ChatMessagePayload } from "./platform-types";
 import { getRedis } from "./redis";
 
 const ROOM_TTL_SECONDS = 7200;
 const MAX_MESSAGES_PER_ROOM = 200;
 const TYPING_TTL_SECONDS = 5;
+const MAX_IMAGE_CHARS = 120_000;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -53,12 +56,22 @@ export async function addChatMessage(
   roomId: string,
   sender: string,
   text: string,
+  options?: { kind?: ChatMessagePayload["kind"]; imageUrl?: string; replyTo?: string },
 ): Promise<ChatMessagePayload> {
+  const filtered = filterMessage(text);
+  if (!filtered.ok) {
+    throw new Error(filtered.reason ?? "Message blocked");
+  }
+
   const message: ChatMessagePayload = {
     id: `${sender}-${nanoid(10)}`,
     sender,
     text: text.trim(),
     timestamp: Date.now(),
+    kind: options?.kind ?? "text",
+    imageUrl: options?.imageUrl,
+    replyTo: options?.replyTo,
+    readBy: [sender],
   };
 
   const redis = getRedis();
@@ -76,6 +89,64 @@ export async function addChatMessage(
     room.messages.splice(0, room.messages.length - MAX_MESSAGES_PER_ROOM);
   }
   return message;
+}
+
+export async function addReaction(
+  roomId: string,
+  messageId: string,
+  sender: string,
+  reaction: string,
+): Promise<ChatMessagePayload | null> {
+  const redis = getRedis();
+  const key = REDIS_KEYS.roomMessages(roomId);
+
+  if (redis) {
+    const rawMessages = await redis.lrange(key, 0, -1);
+    for (let index = 0; index < rawMessages.length; index += 1) {
+      const message = parseMessage(rawMessages[index]);
+      if (!message || message.id !== messageId) continue;
+      message.reaction = reaction;
+      await redis.lset(key, index, JSON.stringify(message));
+      return message;
+    }
+    return null;
+  }
+
+  const room = getMemoryRoom(roomId);
+  const message = room.messages.find((entry: ChatMessagePayload) => entry.id === messageId);
+  if (!message) return null;
+  message.reaction = reaction;
+  return message;
+}
+
+export async function markMessageRead(
+  roomId: string,
+  messageId: string,
+  readerId: string,
+): Promise<void> {
+  const redis = getRedis();
+  const key = REDIS_KEYS.roomMessages(roomId);
+
+  if (redis) {
+    const rawMessages = await redis.lrange(key, 0, -1);
+    for (let index = 0; index < rawMessages.length; index += 1) {
+      const message = parseMessage(rawMessages[index]);
+      if (!message || message.id !== messageId) continue;
+      const readBy = new Set(message.readBy ?? []);
+      readBy.add(readerId);
+      message.readBy = [...readBy];
+      await redis.lset(key, index, JSON.stringify(message));
+      return;
+    }
+    return;
+  }
+
+  const room = getMemoryRoom(roomId);
+  const message = room.messages.find((entry: ChatMessagePayload) => entry.id === messageId);
+  if (!message) return;
+  const readBy = new Set(message.readBy ?? []);
+  readBy.add(readerId);
+  message.readBy = [...readBy];
 }
 
 export async function getChatMessagesSince(
@@ -135,4 +206,12 @@ export async function isPartnerTyping(
   if (!entry?.active) return false;
 
   return Date.now() - entry.updatedAt < TYPING_TTL_SECONDS * 1000;
+}
+
+export function validateImageDataUrl(dataUrl: string): boolean {
+  return (
+    dataUrl.startsWith("data:image/") &&
+    dataUrl.includes("base64,") &&
+    dataUrl.length <= MAX_IMAGE_CHARS
+  );
 }

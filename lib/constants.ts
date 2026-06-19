@@ -14,6 +14,8 @@ export const CHAT_POLL_INTERVAL_MS = 400;
 export const LONG_POLL_TIMEOUT_MS = 25000;
 export const LONG_POLL_RETRY_MS = 120;
 export const MATCH_QUEUE_SCAN_LIMIT = 48;
+export const SKIP_COOLDOWN_MS = 2500;
+export const RECENT_PARTNER_LIMIT = 8;
 export const CHAT_TOPIC = "chinwag-chat";
 export const SYSTEM_TOPIC = "chinwag-system";
 export const TYPING_IDLE_MS = 1500;
@@ -24,17 +26,25 @@ export const REDIS_KEYS = {
   queue: "chinwag:queue",
   user: (userId: string) => `chinwag:user:${userId}`,
   profile: (userId: string) => `chinwag:profile:${userId}`,
+  preferences: (userId: string) => `chinwag:prefs:${userId}`,
+  recentPartners: (userId: string) => `chinwag:recent:${userId}`,
+  presence: "chinwag:presence",
+  ban: (userId: string) => `chinwag:ban:${userId}`,
+  reports: (userId: string) => `chinwag:reportcount:${userId}`,
+  authAccount: (userId: string) => `chinwag:auth:account:${userId}`,
+  authEmail: (email: string) => `chinwag:auth:email:${email}`,
+  authSession: (token: string) => `chinwag:auth:session:${token}`,
+  webrtc: (key: string) => `chinwag:webrtc:${key}`,
+  game: (roomId: string) => `chinwag:game:${roomId}`,
+  analytics: "chinwag:analytics",
+  referral: (userId: string) => `chinwag:referral:${userId}`,
+  referralUse: (code: string) => `chinwag:referral-use:${code}`,
   roomMessages: (roomId: string) => `chinwag:room:${roomId}:messages`,
   roomTyping: (roomId: string, userId: string) =>
     `chinwag:room:${roomId}:typing:${userId}`,
 } as const;
 
-export interface ChatMessagePayload {
-  id: string;
-  sender: string;
-  text: string;
-  timestamp: number;
-}
+export type { ChatMessagePayload } from "./platform-types";
 
 export interface PublicUserProfile {
   name: string;
@@ -48,6 +58,7 @@ export interface UserState {
   roomId: string | null;
   partnerId: string | null;
   updatedAt: number;
+  lastSkipAt?: number;
 }
 
 export interface MatchResponse {
@@ -56,4 +67,9 @@ export interface MatchResponse {
   partnerId?: string;
   partnerName?: string;
   partnerAge?: number;
+  queuePosition?: number;
+  queueAhead?: number;
+  commonInterests?: string[];
+  icebreaker?: string;
+  error?: string;
 }

@@ -1,12 +1,23 @@
 import { nanoid } from "nanoid";
 import {
   MATCH_QUEUE_SCAN_LIMIT,
+  RECENT_PARTNER_LIMIT,
   REDIS_KEYS,
+  SKIP_COOLDOWN_MS,
   type MatchResponse,
   type PublicUserProfile,
   type UserState,
 } from "./constants";
+import { commonInterests, randomIcebreaker } from "./icebreakers";
+import { isUserBanned, recordReport } from "./moderation";
+import {
+  getUserPreferences,
+  preferencesCompatible,
+  setUserPreferences,
+} from "./preferences";
+import type { MatchPreferences } from "./platform-types";
 import { getRedis } from "./redis";
+import { trackPresence } from "./stats";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -17,6 +28,8 @@ declare global {
         profiles: Map<string, PublicUserProfile>;
       }
     | undefined;
+  // eslint-disable-next-line no-var
+  var chinwagRecentStore: Map<string, string[]> | undefined;
 }
 
 const matchStore =
@@ -95,21 +108,77 @@ async function clearPublicProfile(userId: string): Promise<void> {
   matchStore.profiles.delete(userId);
 }
 
+const recentStore =
+  global.chinwagRecentStore ?? (global.chinwagRecentStore = new Map());
+
+async function getRecentPartners(userId: string): Promise<string[]> {
+  const redis = getRedis();
+  if (redis) {
+    const raw = await redis.lrange(REDIS_KEYS.recentPartners(userId), 0, -1);
+    return raw;
+  }
+  return recentStore.get(userId) ?? [];
+}
+
+async function rememberPartner(userId: string, partnerId: string): Promise<void> {
+  const redis = getRedis();
+  if (redis) {
+    const key = REDIS_KEYS.recentPartners(userId);
+    await redis.lrem(key, 0, partnerId);
+    await redis.lpush(key, partnerId);
+    await redis.ltrim(key, 0, RECENT_PARTNER_LIMIT - 1);
+    await redis.expire(key, 86400);
+    return;
+  }
+  const list = recentStore.get(userId) ?? [];
+  const next = [partnerId, ...list.filter((id: string) => id !== partnerId)].slice(
+    0,
+    RECENT_PARTNER_LIMIT,
+  );
+  recentStore.set(userId, next);
+}
+
+async function getQueuePosition(userId: string): Promise<{
+  position: number;
+  ahead: number;
+} | null> {
+  const redis = getRedis();
+  if (redis) {
+    const position = await redis.lpos(REDIS_KEYS.queue, userId);
+    if (position === null) return null;
+    return { position: position + 1, ahead: position };
+  }
+  const index = matchStore.queue.indexOf(userId);
+  if (index === -1) return null;
+  return { position: index + 1, ahead: index };
+}
+
 async function enrichWithPartnerProfile(
   response: MatchResponse,
+  userId?: string,
 ): Promise<MatchResponse> {
   if (response.status !== "matched" || !response.partnerId) {
     return response;
   }
 
   const partnerProfile = await getPublicProfile(response.partnerId);
-  if (!partnerProfile) return response;
+  const enriched: MatchResponse = { ...response };
+  if (partnerProfile) {
+    enriched.partnerName = partnerProfile.name;
+    enriched.partnerAge = partnerProfile.age;
+  }
 
-  return {
-    ...response,
-    partnerName: partnerProfile.name,
-    partnerAge: partnerProfile.age,
-  };
+  if (userId) {
+    const [myPrefs, partnerPrefs] = await Promise.all([
+      getUserPreferences(userId),
+      getUserPreferences(response.partnerId),
+    ]);
+    const shared = commonInterests(myPrefs.interests, partnerPrefs.interests);
+    if (shared.length > 0) enriched.commonInterests = shared;
+    enriched.icebreaker = randomIcebreaker();
+  }
+
+  return enriched;
 }
 
 async function withMatchLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -233,6 +302,23 @@ async function pruneStaleQueueEntry(userId: string): Promise<void> {
   await removeQueueEntry(userId);
 }
 
+async function isCandidateMatch(joinerId: string, candidate: string): Promise<boolean> {
+  if (await isUserBanned(candidate)) return false;
+
+  const recent = await getRecentPartners(joinerId);
+  if (recent.includes(candidate)) return false;
+
+  const [joinerPrefs, candidatePrefs] = await Promise.all([
+    getUserPreferences(joinerId),
+    getUserPreferences(candidate),
+  ]);
+
+  return (
+    preferencesCompatible(joinerPrefs, candidatePrefs) &&
+    preferencesCompatible(candidatePrefs, joinerPrefs)
+  );
+}
+
 async function popValidWaitingUser(joinerId: string): Promise<string | null> {
   const redis = getRedis();
   if (redis) {
@@ -246,12 +332,17 @@ async function popValidWaitingUser(joinerId: string): Promise<string | null> {
       if (candidate === joinerId) continue;
 
       const candidateState = await getUserState(candidate);
-      if (candidateState.status === "waiting") {
+      if (
+        candidateState.status === "waiting" &&
+        (await isCandidateMatch(joinerId, candidate))
+      ) {
         await redis.lrem(REDIS_KEYS.queue, 1, candidate);
         return candidate;
       }
 
-      await redis.lrem(REDIS_KEYS.queue, 1, candidate);
+      if (candidateState.status !== "waiting") {
+        await redis.lrem(REDIS_KEYS.queue, 1, candidate);
+      }
     }
 
     return null;
@@ -266,12 +357,20 @@ async function popValidWaitingUser(joinerId: string): Promise<string | null> {
     }
 
     const candidateState = await getUserState(candidate);
-    if (candidateState.status === "waiting") {
+    if (
+      candidateState.status === "waiting" &&
+      (await isCandidateMatch(joinerId, candidate))
+    ) {
       matchStore.queue.splice(index, 1);
       return candidate;
     }
 
-    matchStore.queue.splice(index, 1);
+    if (candidateState.status !== "waiting") {
+      matchStore.queue.splice(index, 1);
+      continue;
+    }
+
+    index += 1;
   }
 
   return null;
@@ -296,12 +395,19 @@ async function matchPair(
   await removeFromQueue(waitingUser);
   await setUserState(userId, buildMatchedState(roomId, waitingUser));
   await setUserState(waitingUser, buildMatchedState(roomId, userId));
+  await rememberPartner(userId, waitingUser);
+  await rememberPartner(waitingUser, userId);
+  await trackPresence(userId, "matched");
+  await trackPresence(waitingUser, "matched");
 
-  return enrichWithPartnerProfile({
-    status: "matched",
-    roomId,
-    partnerId: waitingUser,
-  });
+  return enrichWithPartnerProfile(
+    {
+      status: "matched",
+      roomId,
+      partnerId: waitingUser,
+    },
+    userId,
+  );
 }
 
 async function tryMatchFromQueue(userId: string): Promise<MatchResponse | null> {
@@ -384,7 +490,13 @@ async function joinMatchQueueMemory(userId: string): Promise<MatchResponse> {
     });
   }
 
-  return { status: "waiting" };
+  const queue = await getQueuePosition(userId);
+  await trackPresence(userId, "waiting");
+  return {
+    status: "waiting",
+    queuePosition: queue?.position,
+    queueAhead: queue?.ahead,
+  };
 }
 
 async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
@@ -433,7 +545,13 @@ async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
     });
   }
 
-  return { status: "waiting" };
+  const queue = await getQueuePosition(userId);
+  await trackPresence(userId, "waiting");
+  return {
+    status: "waiting",
+    queuePosition: queue?.position,
+    queueAhead: queue?.ahead,
+  };
 }
 
 export async function attemptQueueMatch(
@@ -447,11 +565,21 @@ export async function attemptQueueMatch(
 
 export async function getMatchStatus(userId: string): Promise<MatchResponse> {
   const state = await sanitizeUserState(userId);
-  return enrichWithPartnerProfile({
+  await trackPresence(userId, state.status);
+
+  const base: MatchResponse = {
     status: state.status,
     roomId: state.roomId ?? undefined,
     partnerId: state.partnerId ?? undefined,
-  });
+  };
+
+  if (state.status === "waiting") {
+    const queue = await getQueuePosition(userId);
+    base.queuePosition = queue?.position;
+    base.queueAhead = queue?.ahead;
+  }
+
+  return enrichWithPartnerProfile(base, userId);
 }
 
 export async function leaveMatch(userId: string): Promise<void> {
@@ -469,9 +597,27 @@ export async function leaveMatch(userId: string): Promise<void> {
 export async function joinMatchQueue(
   userId: string,
   profileInput?: { name?: string; age?: number } | null,
+  preferencesInput?: Partial<MatchPreferences> | null,
+  options?: { isSkip?: boolean },
 ): Promise<MatchResponse> {
   if (!userId || userId.length < 8) {
     throw new Error("Invalid user id");
+  }
+
+  if (await isUserBanned(userId)) {
+    return { status: "idle", error: "Account temporarily restricted" };
+  }
+
+  const current = await getUserState(userId);
+  if (
+    options?.isSkip &&
+    current.lastSkipAt &&
+    Date.now() - current.lastSkipAt < SKIP_COOLDOWN_MS
+  ) {
+    return {
+      status: "idle",
+      error: `Please wait ${Math.ceil((SKIP_COOLDOWN_MS - (Date.now() - current.lastSkipAt)) / 1000)}s before skipping again`,
+    };
   }
 
   const profile = normalizeProfile(profileInput);
@@ -479,7 +625,18 @@ export async function joinMatchQueue(
     await setPublicProfile(userId, profile);
   }
 
+  if (preferencesInput) {
+    await setUserPreferences(userId, preferencesInput);
+  }
+
   return withMatchLock(async () => {
+    if (options?.isSkip) {
+      await setUserState(userId, {
+        ...defaultState(),
+        lastSkipAt: Date.now(),
+      });
+    }
+
     const redis = getRedis();
     if (redis) {
       return joinMatchQueueRedis(userId);
@@ -503,8 +660,11 @@ export async function reportUser(params: {
   if (redis) {
     await redis.lpush("chinwag:reports", JSON.stringify(entry));
     await redis.ltrim("chinwag:reports", 0, 999);
-    return;
+  } else {
+    console.warn("[CHINWAG REPORT]", entry);
   }
 
-  console.warn("[CHINWAG REPORT]", entry);
+  if (params.reportedId) {
+    await recordReport(params.reportedId);
+  }
 }

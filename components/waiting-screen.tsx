@@ -5,9 +5,16 @@ import { Radio, X } from "lucide-react";
 interface WaitingScreenProps {
   onCancel: () => void;
   isLoading?: boolean;
+  queuePosition?: number | null;
+  queueAhead?: number | null;
 }
 
-export function WaitingScreen({ onCancel, isLoading }: WaitingScreenProps) {
+export function WaitingScreen({
+  onCancel,
+  isLoading,
+  queuePosition,
+  queueAhead,
+}: WaitingScreenProps) {
   return (
     <div className="stranger-waiting">
       <div className="stranger-waiting-card">
@@ -36,6 +43,15 @@ export function WaitingScreen({ onCancel, isLoading }: WaitingScreenProps) {
             <span>.</span>
           </span>
         </h2>
+
+        {queuePosition != null && queuePosition > 0 && (
+          <p className="text-center text-sm text-muted">
+            Queue position #{queuePosition}
+            {queueAhead != null && queueAhead > 0
+              ? ` · ${queueAhead} ahead of you`
+              : " · you're next"}
+          </p>
+        )}
 
         <div className="stranger-waiting-progress" aria-hidden>
           <span className="stranger-waiting-progress-bar" />

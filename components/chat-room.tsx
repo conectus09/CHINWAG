@@ -10,6 +10,8 @@ interface ChatRoomProps {
   partnerName?: string | null;
   partnerAge?: number | null;
   partnerLeft?: boolean;
+  icebreaker?: string | null;
+  commonInterests?: string[];
   onNext: () => void;
   onEnd: () => void;
   onBack?: () => void;
@@ -22,6 +24,8 @@ export function ChatRoom({
   partnerName,
   partnerAge,
   partnerLeft,
+  icebreaker,
+  commonInterests,
   onNext,
   onEnd,
   onBack,
@@ -49,6 +53,8 @@ export function ChatRoom({
       partnerName={partnerName}
       partnerAge={partnerAge}
       partnerLeft={partnerLeft}
+      icebreaker={icebreaker}
+      commonInterests={commonInterests}
       onNext={handleNext}
       onEndChat={handleLeave}
       onBack={onBack}

@@ -1,18 +1,15 @@
-export const AUTH_STORAGE_KEY = "chinwag-auth-session";
+import { clearAuthSession, readAuthSession } from "./auth-client";
+
 export const AUTH_CHANGE_EVENT = "chinwag-auth-change";
 
 export function isLoggedIn(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+  return readAuthSession() !== null;
 }
 
 export function setLoggedIn(loggedIn: boolean) {
-  if (loggedIn) {
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
-  } else {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+  if (!loggedIn) {
+    clearAuthSession();
   }
-  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 export function readAuthLoggedIn() {

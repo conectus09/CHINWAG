@@ -34,6 +34,10 @@ export default function ChatPage() {
     partnerId,
     partnerName,
     partnerAge,
+    queuePosition,
+    queueAhead,
+    commonInterests,
+    icebreaker,
     error,
     isLoading,
     joinQueue,
@@ -82,6 +86,8 @@ export default function ChatPage() {
             partnerId={partnerId}
             partnerName={partnerName}
             partnerAge={partnerAge}
+            icebreaker={icebreaker}
+            commonInterests={commonInterests}
             partnerLeft={phase === "partner_left"}
             onNext={() => void findNext()}
             onEnd={() => void handleEnd()}
@@ -124,6 +130,8 @@ export default function ChatPage() {
               <WaitingScreen
                 onCancel={() => void handleCancel()}
                 isLoading={isLoading}
+                queuePosition={queuePosition}
+                queueAhead={queueAhead}
               />
             )}
 

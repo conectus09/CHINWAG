@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePollingChat } from "@/hooks/use-polling-chat";
+import { useWebRtc } from "@/hooks/use-webrtc";
 import { WhatsAppChatShell } from "@/components/whatsapp-chat-shell";
 import { getUserProfile } from "@/lib/user-profile";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,8 @@ interface WhatsAppChatPollingProps {
   partnerName?: string | null;
   partnerAge?: number | null;
   partnerLeft?: boolean;
+  icebreaker?: string | null;
+  commonInterests?: string[];
   onNext: () => void;
   onEndChat: () => void;
   onBack?: () => void;
@@ -26,16 +29,19 @@ export function WhatsAppChatPolling({
   partnerName,
   partnerAge,
   partnerLeft,
+  icebreaker,
+  commonInterests,
   onNext,
   onEndChat,
   onBack,
   isLoading,
 }: WhatsAppChatPollingProps) {
   const [draft, setDraft] = useState("");
-  const [partnerLeftMessage, setPartnerLeftMessage] = useState<string | null>(
-    null,
-  );
+  const [callMode, setCallMode] = useState<"voice" | "video" | null>(null);
+  const [partnerLeftMessage, setPartnerLeftMessage] = useState<string | null>(null);
   const partnerLeftShownRef = useRef(false);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const profile = getUserProfile();
 
   const {
@@ -46,8 +52,30 @@ export function WhatsAppChatPolling({
     isSending,
     handleDraftChange,
     sendMessage,
+    sendImage,
+    sendReaction,
     setSendError,
   } = usePollingChat({ roomId, userId, partnerId });
+
+  const { localStream, remoteStream, status: callStatus, stop: stopCall } = useWebRtc({
+    roomId,
+    userId,
+    partnerId,
+    enabled: Boolean(callMode && partnerId),
+    mode: callMode,
+  });
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   const partnerHasLeft = partnerLeftMessage != null;
   const canSend = isConnected && !isLoading && !isSending && !partnerHasLeft;
@@ -130,6 +158,27 @@ export function WhatsAppChatPolling({
       onEndChat={onEndChat}
       onBack={onBack}
       onReport={handleReport}
+      onReaction={(messageId, reaction) => void sendReaction(messageId, reaction)}
+      onPickEmoji={(emoji) => setDraft((prev) => `${prev}${emoji}`)}
+      onPickImage={(dataUrl) => void sendImage(dataUrl, canSend)}
+      icebreaker={icebreaker}
+      commonInterests={commonInterests}
+      callMode={callMode}
+      onStartCall={(mode) => setCallMode(mode)}
+      onStopCall={() => {
+        stopCall();
+        setCallMode(null);
+      }}
+      localVideoRef={localVideoRef}
+      remoteVideoRef={remoteVideoRef}
+      callStatus={
+        callMode
+          ? callStatus === "live"
+            ? `${callMode} call live`
+            : `Starting ${callMode} call...`
+          : null
+      }
+      roomId={roomId}
       isLoading={isLoading}
     />
   );

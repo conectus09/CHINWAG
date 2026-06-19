@@ -64,7 +64,14 @@ export default function RootLayout({
     >
       <head>
         <meta name="theme-color" content="#031016" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js'); }); }`,
+          }}
+        />
       </head>
       <body className="min-h-full text-foreground" suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Construction,
   KeyRound,
   Lock,
   Mail,
@@ -13,7 +12,8 @@ import {
 } from "lucide-react";
 import { CaptchaDisplay } from "@/components/captcha-display";
 import { Input } from "@/components/ui/input";
-import { formatCaptchaInput, generateCaptcha } from "@/lib/captcha";
+import { saveAuthSession } from "@/lib/auth-client";
+import { formatCaptchaInput, generateCaptcha, isCaptchaMatch } from "@/lib/captcha";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
@@ -54,7 +54,8 @@ export function AuthModal({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [captchaCode, setCaptchaCode] = useState("");
   const [captchaInput, setCaptchaInput] = useState("");
-  const [workInProgress, setWorkInProgress] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const refreshCaptcha = useCallback(() => {
     setCaptchaCode(generateCaptcha());
@@ -66,7 +67,8 @@ export function AuthModal({
     setPassword("");
     setConfirmPassword("");
     setCaptchaInput("");
-    setWorkInProgress(false);
+    setSubmitting(false);
+    setAuthError(null);
     refreshCaptcha();
   }, [refreshCaptcha]);
 
@@ -96,14 +98,59 @@ export function AuthModal({
     };
   }, [open, onClose]);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setWorkInProgress(true);
+    setAuthError(null);
+
+    if (!isCaptchaMatch(captchaInput, captchaCode)) {
+      setAuthError("Invalid captcha. Try again.");
+      refreshCaptcha();
+      return;
+    }
+
+    if (mode === "signup" && password !== confirmPassword) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: mode,
+          email,
+          password,
+          name: email.split("@")[0] ?? "User",
+          captcha: captchaInput,
+          captchaCode,
+        }),
+      });
+
+      const body = (await response.json()) as {
+        session?: import("@/lib/platform-types").AuthSession;
+        error?: string;
+      };
+
+      if (!response.ok || !body.session) {
+        throw new Error(body.error ?? "Authentication failed");
+      }
+
+      saveAuthSession(body.session);
+      onClose();
+      resetForm();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Authentication failed");
+      refreshCaptcha();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const switchMode = (tab: AuthMode) => {
     setMode(tab);
-    setWorkInProgress(false);
+    setAuthError(null);
   };
 
   if (!open || !mounted) return null;
@@ -190,18 +237,10 @@ export function AuthModal({
 
           <div className="auth-modal-form-panel">
             <form onSubmit={handleSubmit} className="auth-form">
-              {workInProgress && (
-                <div className="auth-wip-banner" role="status">
-                  <Construction className="auth-wip-icon" strokeWidth={1.75} />
-                  <div>
-                    <p className="auth-wip-title">Work in progress</p>
-                    <p className="auth-wip-copy">
-                      {mode === "login"
-                        ? "Login coming soon."
-                        : "Sign up coming soon."}
-                    </p>
-                  </div>
-                </div>
+              {authError && (
+                <p className="auth-alert auth-alert-error" role="alert">
+                  {authError}
+                </p>
               )}
               <div className="auth-field-group">
                 <FieldLabel htmlFor="auth-email">Email</FieldLabel>
@@ -286,9 +325,10 @@ export function AuthModal({
 
               <button
                 type="submit"
-                className={cn("auth-submit-btn", workInProgress && "auth-submit-btn-wip")}
+                className={cn("auth-submit-btn", submitting && "auth-submit-btn-wip")}
+                disabled={submitting}
               >
-                <span>{mode === "login" ? "Login" : "Sign Up"}</span>
+                <span>{submitting ? "Please wait..." : mode === "login" ? "Login" : "Sign Up"}</span>
               </button>
             </form>
           </div>

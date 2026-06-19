@@ -7,6 +7,7 @@ import {
   TYPING_IDLE_MS,
 } from "@/lib/constants";
 import type { ChatMessage } from "@/components/whatsapp-chat-shell";
+import { useSoundNotification } from "@/hooks/use-sound-notification";
 
 interface UsePollingChatOptions {
   roomId: string;
@@ -32,6 +33,8 @@ export function usePollingChat({
   const lastTypingSentRef = useRef(0);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollLoopRef = useRef(0);
+  const knownIdsRef = useRef(new Set<string>());
+  const { play } = useSoundNotification();
 
   const applySnapshot = useCallback(
     (data: {
@@ -40,6 +43,10 @@ export function usePollingChat({
         sender: string;
         text: string;
         timestamp: number;
+        kind?: ChatMessage["kind"];
+        imageUrl?: string;
+        reaction?: string;
+        readBy?: string[];
       }>;
       partnerTyping: boolean;
     }) => {
@@ -50,7 +57,21 @@ export function usePollingChat({
         setMessages((prev) => {
           const merged = [...prev];
           for (const message of data.messages) {
-            if (merged.some((entry) => entry.id === message.id)) continue;
+            const existingIndex = merged.findIndex((entry) => entry.id === message.id);
+            if (existingIndex !== -1) {
+              merged[existingIndex] = {
+                ...merged[existingIndex],
+                ...message,
+                isLocal: message.sender === userId,
+              };
+              continue;
+            }
+
+            if (!knownIdsRef.current.has(message.id) && message.sender !== userId) {
+              play();
+            }
+            knownIdsRef.current.add(message.id);
+
             merged.push({
               ...message,
               isLocal: message.sender === userId,
@@ -64,7 +85,7 @@ export function usePollingChat({
         });
       }
     },
-    [userId],
+    [play, userId],
   );
 
   const pollOnce = useCallback(
@@ -72,6 +93,7 @@ export function usePollingChat({
       const params = new URLSearchParams({
         roomId,
         since: String(lastTimestampRef.current),
+        readerId: userId,
       });
       if (partnerId) params.set("partnerId", partnerId);
       if (useLongPoll) params.set("wait", "1");
@@ -85,13 +107,17 @@ export function usePollingChat({
           sender: string;
           text: string;
           timestamp: number;
+          kind?: ChatMessage["kind"];
+          imageUrl?: string;
+          reaction?: string;
+          readBy?: string[];
         }>;
         partnerTyping: boolean;
       };
 
       applySnapshot(data);
     },
-    [applySnapshot, partnerId, roomId],
+    [applySnapshot, partnerId, roomId, userId],
   );
 
   const sendTyping = useCallback(
@@ -217,18 +243,15 @@ export function usePollingChat({
         });
 
         if (!response.ok) {
-          throw new Error("Send failed");
+          const body = (await response.json()) as { error?: string };
+          throw new Error(body.error ?? "Send failed");
         }
 
         const data = (await response.json()) as {
-          message: {
-            id: string;
-            sender: string;
-            text: string;
-            timestamp: number;
-          };
+          message: ChatMessage;
         };
 
+        knownIdsRef.current.add(data.message.id);
         setMessages((prev) => {
           if (prev.some((entry) => entry.id === data.message.id)) return prev;
           lastTimestampRef.current = Math.max(
@@ -247,14 +270,51 @@ export function usePollingChat({
         void pollOnce(true).catch(() => undefined);
 
         return true;
-      } catch {
-        setSendError("Message failed to send. Try again.");
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Message failed to send. Try again.");
         return false;
       } finally {
         setIsSending(false);
       }
     },
     [pollOnce, roomId, stopLocalTyping, userId],
+  );
+
+  const sendImage = useCallback(
+    async (imageUrl: string, canSend: boolean) => {
+      if (!canSend) return false;
+      setIsSending(true);
+      setSendError(null);
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId, userId, action: "image", imageUrl }),
+        });
+        if (!response.ok) throw new Error("Image send failed");
+        const data = (await response.json()) as { message: ChatMessage };
+        setMessages((prev) => [...prev, { ...data.message, isLocal: true }]);
+        return true;
+      } catch {
+        setSendError("Image failed to send.");
+        return false;
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [roomId, userId],
+  );
+
+  const sendReaction = useCallback(
+    async (messageId: string, reaction: string) => {
+      await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, userId, action: "reaction", messageId, reaction }),
+      });
+      void pollOnce(false);
+    },
+    [pollOnce, roomId, userId],
   );
 
   useEffect(
@@ -272,6 +332,8 @@ export function usePollingChat({
     isSending,
     handleDraftChange,
     sendMessage,
+    sendImage,
+    sendReaction,
     setSendError,
   };
 }

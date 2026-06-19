@@ -12,7 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChatAvatar } from "@/components/chat-avatar";
+import { EmojiPicker } from "@/components/emoji-picker";
 import { ReportModal } from "@/components/report-modal";
+import { TicTacToeGame } from "@/components/tic-tac-toe-game";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +24,10 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   isLocal: boolean;
+  kind?: "text" | "image" | "reaction" | "system";
+  imageUrl?: string;
+  reaction?: string;
+  readBy?: string[];
 }
 
 interface WhatsAppChatShellProps {
@@ -47,6 +53,18 @@ interface WhatsAppChatShellProps {
   onEndChat: () => void;
   onBack?: () => void;
   onReport: (reason: string) => Promise<void>;
+  onReaction?: (messageId: string, reaction: string) => void;
+  onPickEmoji?: (emoji: string) => void;
+  onPickImage?: (dataUrl: string) => void;
+  icebreaker?: string | null;
+  commonInterests?: string[];
+  callMode?: "voice" | "video" | null;
+  onStartCall?: (mode: "voice" | "video") => void;
+  onStopCall?: () => void;
+  localVideoRef?: React.RefObject<HTMLVideoElement | null>;
+  remoteVideoRef?: React.RefObject<HTMLVideoElement | null>;
+  callStatus?: string | null;
+  roomId?: string;
   isLoading?: boolean;
 }
 
@@ -80,11 +98,25 @@ export function WhatsAppChatShell({
   onEndChat,
   onBack,
   onReport,
+  onReaction,
+  onPickEmoji,
+  onPickImage,
+  icebreaker,
+  commonInterests,
+  callMode,
+  onStartCall,
+  onStopCall,
+  localVideoRef,
+  remoteVideoRef,
+  callStatus,
+  roomId,
   isLoading,
 }: WhatsAppChatShellProps) {
   const [upgradeTier, setUpgradeTier] = useState<"pro" | "max" | null>(null);
   const [endChatConfirm, setEndChatConfirm] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [showGame, setShowGame] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const partnerHasLeft = partnerLeftMessage != null;
@@ -186,12 +218,37 @@ export function WhatsAppChatShell({
                     : "whatsapp-connection-status-wait",
                 )}
               >
-                {bothConnected
-                  ? "Connected — chat is live"
-                  : partnerHasLeft
-                    ? "Partner disconnected"
-                    : "Linking strangers..."}
+                {callStatus ??
+                  (bothConnected
+                    ? "Connected — chat is live"
+                    : partnerHasLeft
+                      ? "Partner disconnected"
+                      : "Linking strangers...")}
               </p>
+
+              {(callMode === "video" || callMode === "voice") && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="h-20 w-full rounded-lg bg-black/40 object-cover"
+                  />
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="h-20 w-full rounded-lg bg-black/40 object-cover"
+                  />
+                </div>
+              )}
+
+              {commonInterests && commonInterests.length > 0 && (
+                <p className="mt-2 text-center text-[11px] text-sky-200">
+                  You both like: {commonInterests.join(", ")}
+                </p>
+              )}
             </div>
           </aside>
 
@@ -244,7 +301,9 @@ export function WhatsAppChatShell({
 
                 <button
                   type="button"
-                  onClick={() => setUpgradeTier("pro")}
+                  onClick={() =>
+                    callMode === "voice" ? onStopCall?.() : onStartCall?.("voice")
+                  }
                   className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-card-hover hover:text-foreground"
                   aria-label="Voice call"
                 >
@@ -253,7 +312,9 @@ export function WhatsAppChatShell({
 
                 <button
                   type="button"
-                  onClick={() => setUpgradeTier("max")}
+                  onClick={() =>
+                    callMode === "video" ? onStopCall?.() : onStartCall?.("video")
+                  }
                   className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-card-hover hover:text-foreground"
                   aria-label="Video call"
                 >
@@ -264,10 +325,34 @@ export function WhatsAppChatShell({
 
             <div className="whatsapp-messages min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4">
               {bothConnected && messages.length === 0 && !partnerLeftMessage && (
-                <div className="flex justify-center pb-2">
-                  <p className="whatsapp-connected-banner">
-                    You and {partnerName ?? "your match"} are connected
-                  </p>
+                <div className="space-y-2 pb-2">
+                  <div className="flex justify-center">
+                    <p className="whatsapp-connected-banner">
+                      You and {partnerName ?? "your match"} are connected
+                    </p>
+                  </div>
+                  {icebreaker && (
+                    <div className="mx-auto max-w-md rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-center text-xs text-sky-100">
+                      Icebreaker: {icebreaker}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {bothConnected && roomId && (
+                <div className="pb-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowGame((open) => !open)}
+                    className="text-xs text-sky-300 hover:text-sky-200"
+                  >
+                    {showGame ? "Hide game" : "Play tic-tac-toe"}
+                  </button>
+                  {showGame && (
+                    <div className="mt-2">
+                      <TicTacToeGame roomId={roomId} myMark="X" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -304,17 +389,39 @@ export function WhatsAppChatShell({
                           : "whatsapp-bubble-in rounded-2xl rounded-bl-md",
                       )}
                     >
-                      <p className="text-sm leading-relaxed">{message.text}</p>
-                      <p
+                      {message.kind === "image" && message.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={message.imageUrl}
+                          alt="Shared"
+                          className="max-h-48 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <p className="text-sm leading-relaxed">{message.text}</p>
+                      )}
+                      {message.reaction && (
+                        <span className="mt-1 inline-block text-base">{message.reaction}</span>
+                      )}
+                      <div
                         className={cn(
-                          "mt-1 text-right text-[10px]",
-                          message.isLocal
-                            ? "text-emerald-100/70"
-                            : "text-muted",
+                          "mt-1 flex items-center justify-end gap-2 text-[10px]",
+                          message.isLocal ? "text-emerald-100/70" : "text-muted",
                         )}
                       >
-                        {formatTime(message.timestamp)}
-                      </p>
+                        {message.isLocal &&
+                          message.readBy &&
+                          message.readBy.length > 1 && <span>Seen</span>}
+                        <span>{formatTime(message.timestamp)}</span>
+                        {!message.isLocal && onReaction && (
+                          <button
+                            type="button"
+                            className="opacity-70 hover:opacity-100"
+                            onClick={() => onReaction(message.id, "👍")}
+                          >
+                            👍
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -361,6 +468,17 @@ export function WhatsAppChatShell({
               </p>
             )}
 
+            {emojiOpen && onPickEmoji && (
+              <div className="border-t border-border bg-card px-3 py-2">
+                <EmojiPicker
+                  onPick={(emoji) => {
+                    onPickEmoji(emoji);
+                    setEmojiOpen(false);
+                  }}
+                />
+              </div>
+            )}
+
             <form
               className="whatsapp-input flex shrink-0 items-center gap-2 border-t border-border bg-card px-3 py-2.5"
               onSubmit={(event) => {
@@ -368,6 +486,36 @@ export function WhatsAppChatShell({
                 onSend();
               }}
             >
+              <button
+                type="button"
+                onClick={() => setEmojiOpen((open) => !open)}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-lg hover:bg-card-hover"
+                aria-label="Emoji"
+              >
+                😊
+              </button>
+              {onPickImage && (
+                <label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-xs hover:bg-card-hover">
+                  📷
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        if (typeof reader.result === "string") {
+                          onPickImage(reader.result);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
               <Input
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}

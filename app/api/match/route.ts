@@ -6,6 +6,8 @@ import {
   leaveMatch,
 } from "@/lib/matching";
 import { LONG_POLL_TIMEOUT_MS } from "@/lib/constants";
+import type { MatchPreferences } from "@/lib/platform-types";
+import { trackEvent } from "@/lib/analytics";
 import { waitUntil } from "@/lib/wait-until";
 
 export const dynamic = "force-dynamic";
@@ -61,9 +63,10 @@ export async function POST(request: NextRequest) {
       userId?: string;
       action?: "join" | "next" | "leave";
       profile?: { name?: string; age?: number };
+      preferences?: Partial<MatchPreferences>;
     };
 
-    const { userId, action = "join", profile } = body;
+    const { userId, action = "join", profile, preferences } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -71,16 +74,21 @@ export async function POST(request: NextRequest) {
 
     if (action === "leave") {
       await leaveMatch(userId);
+      await trackEvent({ name: "match_leave", userId });
       return NextResponse.json({ status: "idle" });
     }
 
     if (action === "next") {
       await leaveMatch(userId);
-      const result = await joinMatchQueue(userId, profile);
+      const result = await joinMatchQueue(userId, profile, preferences, {
+        isSkip: true,
+      });
+      await trackEvent({ name: "match_next", userId });
       return NextResponse.json(result);
     }
 
-    const result = await joinMatchQueue(userId, profile);
+    const result = await joinMatchQueue(userId, profile, preferences);
+    await trackEvent({ name: "match_join", userId });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[match POST]", error);

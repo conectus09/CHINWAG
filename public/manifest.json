@@ -1,0 +1,16 @@
+{
+  "name": "Chinwag",
+  "short_name": "Chinwag",
+  "description": "Meet new people instantly with random video, voice, and text chat.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#031016",
+  "theme_color": "#031016",
+  "icons": [
+    {
+      "src": "https://res.cloudinary.com/doafv0hxx/image/upload/v1781636025/ChatGPT_Image_Jun_17_2026_12_22_33_AM_lxq8ah.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

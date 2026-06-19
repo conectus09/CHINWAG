@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import { Play, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MatchPreferencesPanel } from "@/components/match-preferences-panel";
+import { DEFAULT_PREFERENCES } from "@/lib/platform-types";
+import type { MatchPreferences } from "@/lib/platform-types";
 import { getUserProfile, setUserProfile } from "@/lib/user-profile";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +44,9 @@ export function StartGateModal({
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
+  const [preferences, setPreferences] = useState<MatchPreferences>({
+    ...DEFAULT_PREFERENCES,
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,6 +61,7 @@ export function StartGateModal({
       setName(saved.name);
       setAge(String(saved.age));
       setIsAdultConfirmed(saved.isAdultConfirmed);
+      setPreferences(saved.preferences ?? { ...DEFAULT_PREFERENCES });
     } else {
       setName("");
       setAge("");
@@ -108,6 +115,7 @@ export function StartGateModal({
       name: trimmedName,
       age: parsedAge,
       isAdultConfirmed: true,
+      preferences,
     });
 
     onComplete();
@@ -196,6 +204,15 @@ export function StartGateModal({
                 <strong>18 years or older</strong> and agree to chat responsibly.
               </span>
             </label>
+
+            <div className="start-gate-prefs">
+              <p className="start-gate-label-text mb-2">Match preferences</p>
+              <MatchPreferencesPanel
+                value={preferences}
+                onChange={setPreferences}
+                compact
+              />
+            </div>
 
             {error && <p className="start-gate-error">{error}</p>}
 

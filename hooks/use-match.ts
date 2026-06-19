@@ -7,7 +7,7 @@ import {
   MATCH_POLL_INTERVAL_MS,
   type MatchResponse,
 } from "@/lib/constants";
-import { getUserProfile } from "@/lib/user-profile";
+import { getMatchPreferences, getUserProfile } from "@/lib/user-profile";
 
 type MatchPhase = "idle" | "waiting" | "matched" | "partner_left";
 
@@ -22,6 +22,10 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState<string | null>(null);
   const [partnerAge, setPartnerAge] = useState<number | null>(null);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [queueAhead, setQueueAhead] = useState<number | null>(null);
+  const [commonInterests, setCommonInterests] = useState<string[]>([]);
+  const [icebreaker, setIcebreaker] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,6 +41,13 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     setPartnerId(data.partnerId ?? null);
     setPartnerName(data.partnerName ?? null);
     setPartnerAge(data.partnerAge ?? null);
+    setQueuePosition(data.queuePosition ?? null);
+    setQueueAhead(data.queueAhead ?? null);
+    setCommonInterests(data.commonInterests ?? []);
+    setIcebreaker(data.icebreaker ?? null);
+    if (data.error) {
+      setError(data.error);
+    }
     setPhase(data.status === "idle" ? "idle" : data.status);
   }, []);
 
@@ -47,6 +58,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
         userId,
         action,
         ...(profile ? { profile: { name: profile.name, age: profile.age } } : {}),
+        preferences: getMatchPreferences(),
       };
     },
     [userId],
@@ -242,6 +254,10 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     partnerId,
     partnerName,
     partnerAge,
+    queuePosition,
+    queueAhead,
+    commonInterests,
+    icebreaker,
     error,
     isLoading,
     joinQueue,

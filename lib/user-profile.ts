@@ -1,7 +1,11 @@
+import type { Interest, Language, MatchPreferences, Mood, Region } from "./platform-types";
+import { DEFAULT_PREFERENCES } from "./platform-types";
+
 export interface UserProfile {
   name: string;
   age: number;
   isAdultConfirmed: boolean;
+  preferences?: MatchPreferences;
 }
 
 const STORAGE_KEY = "chinwag-user-profile";
@@ -20,7 +24,10 @@ export function getUserProfile(): UserProfile | null {
       parsed.isAdultConfirmed === true &&
       parsed.age >= 18
     ) {
-      return parsed;
+      return {
+        ...parsed,
+        preferences: parsed.preferences ?? { ...DEFAULT_PREFERENCES },
+      };
     }
   } catch {
     return null;
@@ -31,6 +38,24 @@ export function getUserProfile(): UserProfile | null {
 
 export function setUserProfile(profile: UserProfile) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+}
+
+export function getMatchPreferences(): MatchPreferences {
+  return getUserProfile()?.preferences ?? { ...DEFAULT_PREFERENCES };
+}
+
+export function setMatchPreferences(preferences: Partial<MatchPreferences>) {
+  const profile = getUserProfile();
+  if (!profile) return;
+  setUserProfile({
+    ...profile,
+    preferences: {
+      language: (preferences.language ?? profile.preferences?.language ?? "any") as Language,
+      region: (preferences.region ?? profile.preferences?.region ?? "any") as Region,
+      mood: (preferences.mood ?? profile.preferences?.mood ?? "chat") as Mood,
+      interests: (preferences.interests ?? profile.preferences?.interests ?? []) as Interest[],
+    },
+  });
 }
 
 export function hasCompletedStartGate() {
