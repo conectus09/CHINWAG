@@ -7,8 +7,6 @@ import { ArrowLeft, MessageCircle, Play, Shield, Sparkles } from "lucide-react";
 import { AuthModal } from "@/components/auth-modal";
 import { ChatRoom } from "@/components/chat-room";
 import { GuestPerksCard } from "@/components/guest-perks-card";
-import { GuestSessionBadge } from "@/components/guest-session-badge";
-import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { StartGateModal } from "@/components/start-gate-modal";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { WaitingScreen } from "@/components/waiting-screen";
@@ -40,10 +38,8 @@ export default function ChatPage() {
     partnerId,
     partnerName,
     partnerAge,
-    queuePosition,
     queueAhead,
     estimatedWaitSec,
-    waitingOnline,
     guestRemaining,
     commonInterests,
     icebreaker,
@@ -135,11 +131,6 @@ export default function ChatPage() {
                 </Link>
               </div>
 
-              <div className="stranger-chat-header-center">
-                <GuestSessionBadge />
-                <LiveOnlineCounter className="stranger-chat-header-live" />
-              </div>
-
               <div className="stranger-chat-header-theme">
                 <ThemeSwitcher variant="header" />
               </div>
@@ -155,10 +146,8 @@ export default function ChatPage() {
               <WaitingScreen
                 onCancel={() => void handleCancel()}
                 isLoading={isLoading}
-                queuePosition={queuePosition}
                 queueAhead={queueAhead}
                 estimatedWaitSec={estimatedWaitSec}
-                waitingOnline={waitingOnline}
               />
             )}
 

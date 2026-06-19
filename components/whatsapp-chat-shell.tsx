@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { ChatAvatar } from "@/components/chat-avatar";
 import { EmojiPicker } from "@/components/emoji-picker";
 import { ReportModal } from "@/components/report-modal";
-import { TicTacToeGame } from "@/components/tic-tac-toe-game";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +63,6 @@ interface WhatsAppChatShellProps {
   localVideoRef?: React.RefObject<HTMLVideoElement | null>;
   remoteVideoRef?: React.RefObject<HTMLVideoElement | null>;
   callStatus?: string | null;
-  roomId?: string;
   isLoading?: boolean;
 }
 
@@ -109,14 +107,12 @@ export function WhatsAppChatShell({
   localVideoRef,
   remoteVideoRef,
   callStatus,
-  roomId,
   isLoading,
 }: WhatsAppChatShellProps) {
   const [upgradeTier, setUpgradeTier] = useState<"pro" | "max" | null>(null);
   const [endChatConfirm, setEndChatConfirm] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [showGame, setShowGame] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const partnerHasLeft = partnerLeftMessage != null;
@@ -334,23 +330,6 @@ export function WhatsAppChatShell({
                   {icebreaker && (
                     <div className="mx-auto max-w-md rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-center text-xs text-sky-100">
                       Icebreaker: {icebreaker}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {bothConnected && roomId && (
-                <div className="pb-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowGame((open) => !open)}
-                    className="text-xs text-sky-300 hover:text-sky-200"
-                  >
-                    {showGame ? "Hide game" : "Play tic-tac-toe"}
-                  </button>
-                  {showGame && (
-                    <div className="mt-2">
-                      <TicTacToeGame roomId={roomId} myMark="X" />
                     </div>
                   )}
                 </div>

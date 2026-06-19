@@ -12,8 +12,7 @@ interface GuestPerksCardProps {
 const GUEST_FEATURES = [
   "Anonymous random text chat",
   "Voice & video calls",
-  "Emoji, photos & games",
-  "Live online counter",
+  "Emoji & photos",
   "Report & safety filter",
 ];
 

@@ -2,7 +2,6 @@
 
 import { Zap } from "lucide-react";
 import { HeaderActions } from "@/components/header-actions";
-import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { MenuDotsMenu } from "@/components/menu-dots-menu";
 
 export function SiteHeader() {
@@ -12,8 +11,6 @@ export function SiteHeader() {
         <div className="site-header-dots">
           <MenuDotsMenu />
         </div>
-
-        <LiveOnlineCounter className="site-header-live" />
 
         <HeaderActions className="site-header-actions" />
 

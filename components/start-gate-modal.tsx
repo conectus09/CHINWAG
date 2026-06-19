@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, UserRound, X } from "lucide-react";
-import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DEFAULT_PREFERENCES } from "@/lib/platform-types";
@@ -206,10 +205,6 @@ export function StartGateModal({
             </label>
 
             {error && <p className="start-gate-error">{error}</p>}
-
-            <div className="flex justify-center py-1">
-              <LiveOnlineCounter />
-            </div>
 
             <Button type="submit" className="start-gate-submit w-full gap-1.5">
               <Play className="h-3.5 w-3.5" />

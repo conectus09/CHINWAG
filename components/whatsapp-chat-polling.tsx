@@ -185,7 +185,6 @@ export function WhatsAppChatPolling({
             : `Starting ${callMode} call...`
           : null
       }
-      roomId={roomId}
       isLoading={isLoading}
     />
   );

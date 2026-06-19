@@ -3,28 +3,22 @@
 import { Radio, Users, X } from "lucide-react";
 import { ClientErrorBoundary } from "@/components/client-error-boundary";
 import { GuestWaitingExtras } from "@/components/guest-waiting-extras";
-import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { useAuth } from "@/hooks/use-auth";
 
 interface WaitingScreenProps {
   onCancel: () => void;
   isLoading?: boolean;
-  queuePosition?: number | null;
   queueAhead?: number | null;
   estimatedWaitSec?: number | null;
-  waitingOnline?: number | null;
 }
 
 export function WaitingScreen({
   onCancel,
   isLoading,
-  queuePosition,
   queueAhead,
   estimatedWaitSec,
-  waitingOnline,
 }: WaitingScreenProps) {
   const { isLoggedIn } = useAuth();
-  const othersWaiting = Math.max(0, (waitingOnline ?? 1) - 1);
 
   return (
     <div className="stranger-waiting">
@@ -52,32 +46,13 @@ export function WaitingScreen({
         </div>
 
         <h2 className="stranger-waiting-title">
-          {othersWaiting > 0 ? "Someone is joining" : "Waiting for a stranger"}
+          Waiting for a stranger
           <span className="stranger-waiting-ellipsis" aria-hidden>
             <span>.</span>
             <span>.</span>
             <span>.</span>
           </span>
         </h2>
-
-        <p className="stranger-waiting-sub">
-          {othersWaiting > 0
-            ? `${othersWaiting + 1} people in the waiting room — connecting you now`
-            : "You're first in line. When another person joins, you'll match instantly."}
-        </p>
-
-        {queuePosition != null && queuePosition > 0 && (
-          <p className="stranger-waiting-queue text-center text-sm text-muted">
-            Queue #{queuePosition}
-            {queueAhead != null && queueAhead > 0
-              ? ` · ${queueAhead} ahead`
-              : " · you're next"}
-          </p>
-        )}
-
-        <div className="flex justify-center py-2">
-          <LiveOnlineCounter />
-        </div>
 
         {!isLoggedIn && (
           <ClientErrorBoundary label="guest-waiting-extras">
