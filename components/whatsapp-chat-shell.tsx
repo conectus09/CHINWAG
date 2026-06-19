@@ -64,6 +64,8 @@ interface WhatsAppChatShellProps {
   remoteVideoRef?: React.RefObject<HTMLVideoElement | null>;
   callStatus?: string | null;
   isLoading?: boolean;
+  embedded?: boolean;
+  waitingPreview?: boolean;
 }
 
 function formatTime(timestamp: number) {
@@ -108,6 +110,8 @@ export function WhatsAppChatShell({
   remoteVideoRef,
   callStatus,
   isLoading,
+  embedded = false,
+  waitingPreview = false,
 }: WhatsAppChatShellProps) {
   const [upgradeTier, setUpgradeTier] = useState<"pro" | "max" | null>(null);
   const [endChatConfirm, setEndChatConfirm] = useState(false);
@@ -158,7 +162,13 @@ export function WhatsAppChatShell({
 
   return (
     <>
-      <div className="whatsapp-chat flex h-dvh w-full overflow-hidden">
+      <div
+        className={cn(
+          "whatsapp-chat flex w-full overflow-hidden",
+          embedded ? "whatsapp-chat-embedded h-full" : "h-dvh",
+          waitingPreview && "whatsapp-chat-waiting-preview",
+        )}
+      >
         <div className="whatsapp-split flex h-full w-full overflow-hidden">
           <aside className="whatsapp-video-box w-[30%] shrink-0">
             <div className="whatsapp-connection-panel">
@@ -211,7 +221,9 @@ export function WhatsAppChatShell({
                   "whatsapp-connection-status",
                   bothConnected
                     ? "whatsapp-connection-status-live"
-                    : "whatsapp-connection-status-wait",
+                    : waitingPreview
+                      ? "whatsapp-connection-status-search"
+                      : "whatsapp-connection-status-wait",
                 )}
               >
                 {callStatus ??
@@ -219,7 +231,9 @@ export function WhatsAppChatShell({
                     ? "Connected — chat is live"
                     : partnerHasLeft
                       ? "Partner disconnected"
-                      : "Linking strangers...")}
+                      : waitingPreview
+                        ? "Scanning for someone online..."
+                        : "Linking strangers...")}
               </p>
 
               {(callMode === "video" || callMode === "voice") && (
@@ -248,7 +262,12 @@ export function WhatsAppChatShell({
             </div>
           </aside>
 
-          <div className="whatsapp-chat-panel w-[70%] min-w-0 shrink-0">
+          <div
+            className={cn(
+              "whatsapp-chat-panel w-[70%] min-w-0 shrink-0",
+              embedded && "whatsapp-chat-panel-embedded",
+            )}
+          >
             <header className="whatsapp-header flex shrink-0 items-center gap-2 px-2 py-3 sm:px-4">
               {onBack && (
                 <button
@@ -336,10 +355,24 @@ export function WhatsAppChatShell({
               )}
 
               {messages.length === 0 && !partnerLeftMessage && !bothConnected ? (
-                <div className="flex h-full items-center justify-center">
-                  <p className="rounded-xl bg-card/80 px-4 py-2 text-center text-sm text-muted shadow-sm">
-                    Linking your random match...
-                  </p>
+                <div className="flex h-full items-center justify-center px-4">
+                  {waitingPreview ? (
+                    <div className="whatsapp-waiting-empty">
+                      <div className="whatsapp-waiting-empty-rings" aria-hidden>
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                      <p className="whatsapp-waiting-empty-title">Your chat is almost ready</p>
+                      <p className="whatsapp-waiting-empty-copy">
+                        Messages unlock the second a stranger connects.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="rounded-xl bg-card/80 px-4 py-2 text-center text-sm text-muted shadow-sm">
+                      Linking your random match...
+                    </p>
+                  )}
                 </div>
               ) : (
                 messages.map((message) =>
@@ -511,7 +544,9 @@ export function WhatsAppChatShell({
                     ? "Partner left the chat"
                     : canSend
                       ? "Type a message"
-                      : "Connecting..."
+                      : waitingPreview
+                        ? "Waiting for your match..."
+                        : "Connecting..."
                 }
                 autoComplete="off"
                 disabled={!canSend}

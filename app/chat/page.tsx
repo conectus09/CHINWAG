@@ -10,6 +10,7 @@ import { GuestPerksCard } from "@/components/guest-perks-card";
 import { StartGateModal } from "@/components/start-gate-modal";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { WaitingScreen } from "@/components/waiting-screen";
+import { WhatsAppChatWaitingPreview } from "@/components/whatsapp-chat-waiting-preview";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useMatch } from "@/hooks/use-match";
@@ -95,7 +96,32 @@ export default function ChatPage() {
         }
       />
 
-      {(phase === "matched" || phase === "partner_left") && roomId ? (
+      {showWaiting ? (
+        <div className="stranger-chat-waiting-layout fixed inset-0 z-40 flex flex-col">
+          <div className="stranger-chat-glow stranger-chat-glow-a" aria-hidden />
+          <div className="stranger-chat-glow stranger-chat-glow-b" aria-hidden />
+
+          {error && (
+            <div className="stranger-chat-waiting-error" role="alert">
+              {error}
+            </div>
+          )}
+
+          <WaitingScreen
+            variant="dock"
+            onCancel={() => void handleCancel()}
+            isLoading={isLoading}
+            queueAhead={queueAhead}
+            estimatedWaitSec={estimatedWaitSec}
+          />
+          <div className="stranger-chat-waiting-body min-h-0 flex-1">
+            <WhatsAppChatWaitingPreview
+              userId={userId}
+              onBack={() => void handleCancel()}
+            />
+          </div>
+        </div>
+      ) : (phase === "matched" || phase === "partner_left") && roomId ? (
         <div className="fixed inset-0 z-40 flex flex-col">
           <ChatRoom
             key={roomId}
@@ -142,16 +168,7 @@ export default function ChatPage() {
               </div>
             )}
 
-            {showWaiting && (
-              <WaitingScreen
-                onCancel={() => void handleCancel()}
-                isLoading={isLoading}
-                queueAhead={queueAhead}
-                estimatedWaitSec={estimatedWaitSec}
-              />
-            )}
-
-            {phase === "idle" && !isLoading && !showWaiting && gatePassed && guestRemaining !== 0 && (
+            {phase === "idle" && !isLoading && gatePassed && guestRemaining !== 0 && (
               <div className="stranger-lobby">
                 <div className="stranger-lobby-card">
                   <div className="stranger-lobby-badge">
@@ -161,8 +178,8 @@ export default function ChatPage() {
 
                   <h1 className="stranger-lobby-title">Ready for a random chinwag?</h1>
                   <p className="stranger-lobby-copy">
-                    Tap below to match with someone online right now. Video, voice, or
-                    text — your choice once connected.
+                    One tap to match. Chat opens instantly — video, voice, or text when
+                    you&apos;re both in.
                   </p>
 
                   <div className="stranger-lobby-features">

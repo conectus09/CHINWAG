@@ -15,11 +15,13 @@ const SAFETY_TIPS = [
 interface GuestWaitingExtrasProps {
   queueAhead?: number | null;
   estimatedWaitSec?: number | null;
+  compact?: boolean;
 }
 
 export function GuestWaitingExtras({
   queueAhead,
   estimatedWaitSec,
+  compact = false,
 }: GuestWaitingExtrasProps) {
   const { soundEnabled, lastIcebreaker } = useGuestSession();
   const [tipIndex, setTipIndex] = useState(0);
@@ -61,6 +63,50 @@ export function GuestWaitingExtras({
     }
     window.setTimeout(() => setShareMsg(null), 2500);
   }, []);
+
+  if (compact) {
+    return (
+      <div className="guest-waiting-extras guest-waiting-extras-compact">
+        <div className="guest-waiting-tip guest-waiting-tip-compact">
+          <Lightbulb className="h-3 w-3 shrink-0 text-amber-300" />
+          <p>{SAFETY_TIPS[tipIndex]}</p>
+        </div>
+
+        <div className="guest-waiting-actions guest-waiting-actions-compact">
+          {icebreaker && (
+            <span className="guest-waiting-icebreaker-chip" title={icebreaker}>
+              💬 {icebreaker}
+            </span>
+          )}
+          <button
+            type="button"
+            className="guest-waiting-action"
+            onClick={() => void shuffleIcebreaker()}
+          >
+            Icebreaker
+          </button>
+          <button type="button" className="guest-waiting-action" onClick={() => void shareInvite()}>
+            <Share2 className="h-3 w-3" />
+            Invite
+          </button>
+          <button
+            type="button"
+            className="guest-waiting-action guest-waiting-action-icon"
+            onClick={() => setGuestSoundEnabled(!soundEnabled)}
+            aria-label={soundEnabled ? "Mute sounds" : "Enable sounds"}
+          >
+            {soundEnabled ? (
+              <Volume2 className="h-3 w-3" />
+            ) : (
+              <VolumeX className="h-3 w-3" />
+            )}
+          </button>
+        </div>
+
+        {shareMsg && <p className="guest-waiting-share-msg">{shareMsg}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="guest-waiting-extras">
