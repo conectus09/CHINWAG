@@ -3848,13 +3848,40 @@ body.start-gate-open > :not(.start-gate-overlay):not(.start-gate-shell) {
   }
 }
 
+.stranger-waiting-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .stranger-waiting-title {
-  margin-bottom: 1.15rem;
+  margin-bottom: 0.55rem;
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.15;
   color: var(--foreground);
+}
+
+.stranger-waiting-sub {
+  margin-bottom: 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.stranger-waiting-queue {
+  margin-bottom: 0.35rem;
 }
 
 .stranger-waiting-ellipsis {

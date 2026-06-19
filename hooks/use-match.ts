@@ -29,6 +29,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   const [commonInterests, setCommonInterests] = useState<string[]>([]);
   const [icebreaker, setIcebreaker] = useState<string | null>(null);
   const [estimatedWaitSec, setEstimatedWaitSec] = useState<number | null>(null);
+  const [waitingOnline, setWaitingOnline] = useState<number | null>(null);
   const [guestRemaining, setGuestRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,6 +53,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     setCommonInterests(data.commonInterests ?? []);
     setIcebreaker(data.icebreaker ?? null);
     setEstimatedWaitSec(data.estimatedWaitSec ?? null);
+    setWaitingOnline(data.waitingOnline ?? null);
     setGuestRemaining(data.guestRemaining ?? null);
     if (data.error) {
       setError(data.error);
@@ -121,6 +123,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
 
   const joinQueue = useCallback(async () => {
     if (!userId) return;
+    setPhase("waiting");
     setIsLoading(true);
     setError(null);
 
@@ -153,6 +156,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
 
   const findNext = useCallback(async () => {
     if (!userId) return;
+    setPhase("waiting");
     setIsLoading(true);
     setError(null);
     stopPolling();
@@ -275,6 +279,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     commonInterests,
     icebreaker,
     estimatedWaitSec,
+    waitingOnline,
     guestRemaining,
     error,
     isLoading,

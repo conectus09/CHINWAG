@@ -43,6 +43,7 @@ export default function ChatPage() {
     queuePosition,
     queueAhead,
     estimatedWaitSec,
+    waitingOnline,
     guestRemaining,
     commonInterests,
     icebreaker,
@@ -66,6 +67,9 @@ export default function ChatPage() {
     setGateOpen(false);
     setGatePassed(true);
   }, []);
+
+  const showWaiting =
+    phase === "waiting" || (isLoading && gatePassed && phase === "idle");
 
   if (!userId) {
     return (
@@ -147,17 +151,18 @@ export default function ChatPage() {
               </div>
             )}
 
-            {phase === "waiting" && (
+            {showWaiting && (
               <WaitingScreen
                 onCancel={() => void handleCancel()}
                 isLoading={isLoading}
                 queuePosition={queuePosition}
                 queueAhead={queueAhead}
                 estimatedWaitSec={estimatedWaitSec}
+                waitingOnline={waitingOnline}
               />
             )}
 
-            {phase === "idle" && !isLoading && gatePassed && guestRemaining !== 0 && (
+            {phase === "idle" && !isLoading && !showWaiting && gatePassed && guestRemaining !== 0 && (
               <div className="stranger-lobby">
                 <div className="stranger-lobby-card">
                   <div className="stranger-lobby-badge">

@@ -148,6 +148,39 @@ async function rememberPartner(userId: string, partnerId: string): Promise<void>
   recentStore.set(userId, next);
 }
 
+async function getLiveWaitingCount(): Promise<number> {
+  const redis = getRedis();
+  const members = redis
+    ? await redis.lrange(REDIS_KEYS.queue, 0, -1)
+    : [...matchStore.queue];
+
+  let count = 0;
+  for (const memberId of members) {
+    const state = await getUserState(memberId);
+    if (state.status === "waiting" && (await isUserLive(memberId))) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+async function buildWaitingResponse(userId: string): Promise<MatchResponse> {
+  const queue = await getQueuePosition(userId);
+  const waitingOnline = await getLiveWaitingCount();
+  const ahead = queue?.ahead ?? 0;
+
+  return withGuestMeta(
+    {
+      status: "waiting",
+      queuePosition: queue?.position,
+      queueAhead: ahead,
+      waitingOnline,
+      estimatedWaitSec: estimateWaitSeconds(ahead),
+    },
+    userId,
+  );
+}
+
 async function getQueuePosition(userId: string): Promise<{
   position: number;
   ahead: number;
@@ -179,7 +212,9 @@ async function withGuestMeta(
   };
 
   if (response.status === "waiting") {
-    enriched.estimatedWaitSec = estimateWaitSeconds(response.queueAhead ?? 0);
+    enriched.estimatedWaitSec =
+      response.estimatedWaitSec ?? estimateWaitSeconds(response.queueAhead ?? 0);
+    enriched.waitingOnline = response.waitingOnline;
   }
 
   return enriched;
@@ -619,16 +654,8 @@ async function joinMatchQueueMemory(userId: string): Promise<MatchResponse> {
     });
   }
 
-  const queue = await getQueuePosition(userId);
   await trackPresence(userId, "waiting");
-  return withGuestMeta(
-    {
-      status: "waiting",
-      queuePosition: queue?.position,
-      queueAhead: queue?.ahead,
-    },
-    userId,
-  );
+  return buildWaitingResponse(userId);
 }
 
 async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
@@ -679,16 +706,8 @@ async function joinMatchQueueRedis(userId: string): Promise<MatchResponse> {
     });
   }
 
-  const queue = await getQueuePosition(userId);
   await trackPresence(userId, "waiting");
-  return withGuestMeta(
-    {
-      status: "waiting",
-      queuePosition: queue?.position,
-      queueAhead: queue?.ahead,
-    },
-    userId,
-  );
+  return buildWaitingResponse(userId);
 }
 
 export async function attemptQueueMatch(
@@ -712,10 +731,7 @@ export async function getMatchStatus(userId: string): Promise<MatchResponse> {
   };
 
   if (state.status === "waiting") {
-    const queue = await getQueuePosition(userId);
-    base.queuePosition = queue?.position;
-    base.queueAhead = queue?.ahead;
-    return withGuestMeta(base, userId);
+    return buildWaitingResponse(userId);
   }
 
   return enrichWithPartnerProfile(base, userId);
