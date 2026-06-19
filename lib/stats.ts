@@ -1,4 +1,4 @@
-import { REDIS_KEYS } from "./constants";
+import { ONLINE_USERS_KEY, REDIS_KEYS } from "./constants";
 import { getRedis } from "./redis";
 import type { PlatformStats } from "./platform-types";
 
@@ -26,6 +26,19 @@ export async function getPlatformStats(): Promise<PlatformStats> {
   const redis = getRedis();
   const now = Date.now();
   const staleMs = 90_000;
+
+  // Prefer Socket.io presence set when available (same source as live counter)
+  if (redis) {
+    const socketOnline = await redis.scard(ONLINE_USERS_KEY);
+    if (socketOnline > 0) {
+      return {
+        online: socketOnline,
+        waiting: 0,
+        chatting: 0,
+        totalToday: Math.max(socketOnline, Math.round(socketOnline * 1.4 + 12)),
+      };
+    }
+  }
 
   let waiting = 0;
   let chatting = 0;

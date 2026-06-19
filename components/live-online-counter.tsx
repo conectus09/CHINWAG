@@ -1,41 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-interface Stats {
-  online: number;
-  waiting: number;
-  chatting: number;
-}
+import { useOnlineCount } from "@/hooks/use-online-count";
 
 export function LiveOnlineCounter({ className = "" }: { className?: string }) {
-  const [stats, setStats] = useState<Stats | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const response = await fetch("/api/stats");
-        if (!response.ok) return;
-        const data = (await response.json()) as Stats;
-        if (!cancelled) setStats(data);
-      } catch {
-        // keep last value
-      }
-    }
-
-    void load();
-    const timer = window.setInterval(() => void load(), 8000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const online = stats?.online ?? 0;
-  const waiting = stats?.waiting ?? 0;
-  const chatting = stats?.chatting ?? 0;
+  const { count } = useOnlineCount();
+  const displayCount = count ?? 0;
 
   return (
     <div
@@ -53,16 +22,13 @@ export function LiveOnlineCounter({ className = "" }: { className?: string }) {
       <span className="live-counter-divider hidden h-3 w-px sm:block" aria-hidden />
 
       <p className="live-counter-copy whitespace-nowrap text-xs sm:text-[13px]">
-        <span className="live-counter-number font-semibold tabular-nums">
-          {online.toLocaleString("en-US")}
+        <span
+          className="live-counter-number font-semibold tabular-nums"
+          suppressHydrationWarning
+        >
+          {displayCount.toLocaleString("en-US")}
         </span>
-        <span className="live-counter-label"> online</span>
-        {online > 0 && (
-          <span className="live-counter-label hidden sm:inline">
-            {" "}
-            · {chatting} chatting · {waiting} waiting
-          </span>
-        )}
+        <span className="live-counter-label"> people online right now</span>
       </p>
     </div>
   );

@@ -22,6 +22,10 @@ export const TYPING_IDLE_MS = 1500;
 export const TYPING_HEARTBEAT_MS = 1000;
 export const TYPING_PARTNER_TIMEOUT_MS = 3000;
 
+/** Socket.io presence SET — one member per connected socket */
+export const ONLINE_USERS_KEY = "online_users";
+export const ONLINE_USERS_LAST_EMIT_KEY = "online_users:last_emit";
+
 export const REDIS_KEYS = {
   queue: "chinwag:queue",
   user: (userId: string) => `chinwag:user:${userId}`,
