@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
           }
           return null;
         },
-        { intervalMs: 15, timeoutMs: LONG_POLL_TIMEOUT_MS },
+        { intervalMs: 50, timeoutMs: LONG_POLL_TIMEOUT_MS },
       );
 
       if (updated) {

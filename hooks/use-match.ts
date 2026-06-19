@@ -221,20 +221,27 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     const loopId = longPollLoopRef.current + 1;
     longPollLoopRef.current = loopId;
     let cancelled = false;
-
-    void fetchStatus(true);
+    let longPollInFlight = false;
 
     const burst = window.setInterval(() => {
-      void fetchStatus(true).catch(() => undefined);
+      void fetchStatus(false).catch(() => undefined);
     }, MATCH_BURST_POLL_MS);
 
     async function longPollLoop() {
       while (!cancelled && longPollLoopRef.current === loopId) {
+        if (longPollInFlight) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          continue;
+        }
+
+        longPollInFlight = true;
         try {
           const data = await fetchStatus(true);
           if (!data || data.status !== "waiting") break;
         } catch {
           await new Promise((resolve) => setTimeout(resolve, LONG_POLL_RETRY_MS));
+        } finally {
+          longPollInFlight = false;
         }
       }
     }

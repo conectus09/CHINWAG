@@ -69,7 +69,29 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script
           dangerouslySetInnerHTML={{
-            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js'); }); }`,
+            __html: `if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').then(function (reg) {
+      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      reg.addEventListener('updatefound', function () {
+        var worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', function () {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      });
+    }).catch(function () {});
+    caches.keys().then(function (keys) {
+      keys.forEach(function (key) {
+        if (key.indexOf('chinwag-v1') !== -1 || key.indexOf('chinwag-v2') !== -1) {
+          caches.delete(key);
+        }
+      });
+    }).catch(function () {});
+  });
+}`,
           }}
         />
       </head>

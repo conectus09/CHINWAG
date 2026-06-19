@@ -26,12 +26,13 @@ export function useOnlineCount() {
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
 
-    socket.on("online_count", onCount);
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-
-    connectPresenceSocket();
-    if (socket.connected) setConnected(true);
+    if (socket) {
+      socket.on("online_count", onCount);
+      socket.on("connect", onConnect);
+      socket.on("disconnect", onDisconnect);
+      connectPresenceSocket();
+      if (socket.connected) setConnected(true);
+    }
 
     let cancelled = false;
     const poll = async () => {
@@ -40,7 +41,9 @@ export function useOnlineCount() {
         if (!response.ok || cancelled) return;
         const data = (await response.json()) as { online?: number };
         if (!cancelled && typeof data.online === "number") {
-          setCount((prev) => (prev === null || !socket.connected ? data.online! : prev));
+          setCount((prev) =>
+            prev === null || !socket?.connected ? data.online! : prev,
+          );
         }
       } catch {
         // ignore
@@ -52,13 +55,17 @@ export function useOnlineCount() {
     return () => {
       cancelled = true;
       window.clearInterval(pollTimer);
-      socket.off("online_count", onCount);
-      socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
-      subscriberCount -= 1;
-      if (subscriberCount <= 0 && socket.connected) {
-        socket.disconnect();
-        subscriberCount = 0;
+      if (socket) {
+        socket.off("online_count", onCount);
+        socket.off("connect", onConnect);
+        socket.off("disconnect", onDisconnect);
+        subscriberCount -= 1;
+        if (subscriberCount <= 0 && socket.connected) {
+          socket.disconnect();
+          subscriberCount = 0;
+        }
+      } else {
+        subscriberCount -= 1;
       }
     };
   }, []);

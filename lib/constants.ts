@@ -11,7 +11,8 @@ export const LEGAL_LAST_UPDATED = "17 June 2026";
 export const MATCH_POLL_INTERVAL_MS = 120;
 export const MATCH_BURST_POLL_MS = 40;
 export const CHAT_POLL_INTERVAL_MS = 400;
-export const LONG_POLL_TIMEOUT_MS = 25000;
+/** Keep below typical reverse-proxy timeouts (e.g. Render ~30s) to avoid hung workers. */
+export const LONG_POLL_TIMEOUT_MS = 12000;
 export const LONG_POLL_RETRY_MS = 60;
 export const MATCH_QUEUE_SCAN_LIMIT = 64;
 export const SKIP_COOLDOWN_MS = 1500;
