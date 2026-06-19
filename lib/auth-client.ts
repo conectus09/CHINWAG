@@ -15,19 +15,31 @@ export function clearAuthSession() {
   window.dispatchEvent(new Event("chinwag-auth-change"));
 }
 
+/** Pure read for useSyncExternalStore — no storage writes during render. */
 export function readAuthSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const session = JSON.parse(raw) as AuthSession;
-    if (session.expiresAt <= Date.now()) {
-      clearAuthSession();
-      return null;
-    }
+    if (session.expiresAt <= Date.now()) return null;
     return session;
   } catch {
     return null;
+  }
+}
+
+export function pruneExpiredAuthSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    const session = JSON.parse(raw) as AuthSession;
+    if (session.expiresAt <= Date.now()) {
+      clearAuthSession();
+    }
+  } catch {
+    clearAuthSession();
   }
 }
 

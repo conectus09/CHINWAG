@@ -1,4 +1,8 @@
-import { clearAuthSession, readAuthSession } from "./auth-client";
+import {
+  clearAuthSession,
+  pruneExpiredAuthSession,
+  readAuthSession,
+} from "./auth-client";
 
 export const AUTH_CHANGE_EVENT = "chinwag-auth-change";
 
@@ -18,6 +22,7 @@ export function readAuthLoggedIn() {
 
 export function subscribeAuth(callback: () => void) {
   if (typeof window === "undefined") return () => undefined;
+  pruneExpiredAuthSession();
   window.addEventListener("storage", callback);
   window.addEventListener(AUTH_CHANGE_EVENT, callback);
   return () => {

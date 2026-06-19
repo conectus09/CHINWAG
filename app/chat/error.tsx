@@ -21,6 +21,11 @@ export default function ChatError({
           <p className="stranger-lobby-copy">
             Something crashed while opening chat. Reload to try again.
           </p>
+          {process.env.NODE_ENV === "development" && error?.message && (
+            <p className="stranger-lobby-copy text-sm text-red-300/90">
+              {error.message}
+            </p>
+          )}
           <button
             type="button"
             className="guest-waiting-action"

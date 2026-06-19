@@ -22,8 +22,6 @@ function ensureThemeVersion() {
 export function readTheme(): ThemeId {
   if (typeof window === "undefined") return DEFAULT_THEME;
 
-  ensureThemeVersion();
-
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
   return stored && isThemeId(stored) ? stored : DEFAULT_THEME;
 }
@@ -49,6 +47,8 @@ export function setTheme(theme: ThemeId) {
 }
 
 export function subscribeTheme(callback: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  ensureThemeVersion();
   window.addEventListener("storage", callback);
   window.addEventListener(THEME_CHANGE_EVENT, callback);
   return () => {

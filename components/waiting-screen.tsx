@@ -1,6 +1,7 @@
 "use client";
 
 import { Radio, Users, X } from "lucide-react";
+import { ClientErrorBoundary } from "@/components/client-error-boundary";
 import { GuestWaitingExtras } from "@/components/guest-waiting-extras";
 import { LiveOnlineCounter } from "@/components/live-online-counter";
 import { useAuth } from "@/hooks/use-auth";
@@ -79,10 +80,12 @@ export function WaitingScreen({
         </div>
 
         {!isLoggedIn && (
-          <GuestWaitingExtras
-            queueAhead={queueAhead}
-            estimatedWaitSec={estimatedWaitSec}
-          />
+          <ClientErrorBoundary label="guest-waiting-extras">
+            <GuestWaitingExtras
+              queueAhead={queueAhead}
+              estimatedWaitSec={estimatedWaitSec}
+            />
+          </ClientErrorBoundary>
         )}
 
         <div className="stranger-waiting-progress" aria-hidden>

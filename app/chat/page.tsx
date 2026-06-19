@@ -22,16 +22,16 @@ export default function ChatPage() {
   const router = useRouter();
   const userId = useUserId();
   const { isLoggedIn } = useAuth();
+  const [gateReady, setGateReady] = useState(false);
   const [gatePassed, setGatePassed] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
-    if (hasCompletedStartGate()) {
-      setGatePassed(true);
-    } else {
-      setGateOpen(true);
-    }
+    const passed = hasCompletedStartGate();
+    setGatePassed(passed);
+    setGateOpen(!passed);
+    setGateReady(true);
   }, []);
 
   const {
@@ -52,7 +52,7 @@ export default function ChatPage() {
     joinQueue,
     findNext,
     cancel,
-  } = useMatch({ userId, autoStart: gatePassed });
+  } = useMatch({ userId, autoStart: gateReady && gatePassed });
 
   const handleCancel = useCallback(async () => {
     await cancel();
@@ -71,7 +71,7 @@ export default function ChatPage() {
   const showWaiting =
     phase === "waiting" || (isLoading && gatePassed && phase === "idle");
 
-  if (!userId) {
+  if (!userId || !gateReady) {
     return (
       <div className="stranger-chat-page stranger-chat-loading">
         <div className="stranger-chat-glow stranger-chat-glow-a" aria-hidden />

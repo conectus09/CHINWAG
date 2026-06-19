@@ -13,6 +13,19 @@ import { getMatchPreferences, getUserProfile } from "@/lib/user-profile";
 
 type MatchPhase = "idle" | "waiting" | "matched" | "partner_left";
 
+const MATCH_PHASES = new Set<MatchPhase>([
+  "idle",
+  "waiting",
+  "matched",
+  "partner_left",
+]);
+
+function normalizePhase(status: MatchResponse["status"]): MatchPhase {
+  return MATCH_PHASES.has(status as MatchPhase)
+    ? (status as MatchPhase)
+    : "idle";
+}
+
 interface UseMatchOptions {
   userId: string | null;
   autoStart?: boolean;
@@ -35,6 +48,8 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   const [isLoading, setIsLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const longPollLoopRef = useRef(0);
+  const autoStartFiredRef = useRef(false);
+  const joinInFlightRef = useRef(false);
 
   const applyResponse = useCallback((data: MatchResponse) => {
     if (data.status === "partner_left") {
@@ -58,7 +73,7 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
     if (data.error) {
       setError(data.error);
     }
-    setPhase(data.status === "idle" ? "idle" : data.status);
+    setPhase(normalizePhase(data.status));
 
     if (wasMatched && !readAuthSession()) {
       recordGuestMatch();
@@ -122,8 +137,8 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   }, [fetchStatus, stopPolling]);
 
   const joinQueue = useCallback(async () => {
-    if (!userId) return;
-    setPhase("waiting");
+    if (!userId || joinInFlightRef.current) return;
+    joinInFlightRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -144,19 +159,22 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
 
       if (data.status === "waiting" || data.status === "matched") {
         startPolling();
-      } else if (data.status === "idle") {
+      } else {
         stopPolling();
       }
     } catch (err) {
+      stopPolling();
+      setPhase("idle");
       setError(err instanceof Error ? err.message : "Failed to join");
     } finally {
+      joinInFlightRef.current = false;
       setIsLoading(false);
     }
   }, [applyResponse, buildMatchBody, startPolling, stopPolling, userId]);
 
   const findNext = useCallback(async () => {
-    if (!userId) return;
-    setPhase("waiting");
+    if (!userId || joinInFlightRef.current) return;
+    joinInFlightRef.current = true;
     setIsLoading(true);
     setError(null);
     stopPolling();
@@ -180,8 +198,11 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
         startPolling();
       }
     } catch (err) {
+      stopPolling();
+      setPhase("idle");
       setError(err instanceof Error ? err.message : "Failed to find next");
     } finally {
+      joinInFlightRef.current = false;
       setIsLoading(false);
     }
   }, [applyResponse, buildMatchBody, startPolling, stopPolling, userId]);
@@ -214,9 +235,13 @@ export function useMatch({ userId, autoStart = false }: UseMatchOptions) {
   }, [cancel]);
 
   useEffect(() => {
-    if (autoStart && userId && phase === "idle") {
-      void joinQueue();
+    if (!autoStart) {
+      autoStartFiredRef.current = false;
+      return;
     }
+    if (!userId || phase !== "idle" || autoStartFiredRef.current) return;
+    autoStartFiredRef.current = true;
+    void joinQueue();
   }, [autoStart, joinQueue, phase, userId]);
 
   useEffect(() => {
